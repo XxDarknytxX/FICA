@@ -1,0 +1,77 @@
+# ─── macOS ──────────────────────────────────────────────────────────────────
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# ─── IDE / Editors ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# ─── Secrets / Environment ──────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Web App — Backend (Node.js / Express)
+# ═══════════════════════════════════════════════════════════════════════════
+Web App/backend/node_modules/
+Web App/backend/dist/
+Web App/backend/build/
+Web App/backend/.env
+Web App/backend/npm-debug.log*
+Web App/backend/yarn-debug.log*
+Web App/backend/yarn-error.log*
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Web App — Frontend (React + Vite)
+# ═══════════════════════════════════════════════════════════════════════════
+Web App/frontend/node_modules/
+Web App/frontend/dist/
+Web App/frontend/build/
+Web App/frontend/.env
+Web App/frontend/.env.local
+Web App/frontend/npm-debug.log*
+Web App/frontend/yarn-debug.log*
+Web App/frontend/yarn-error.log*
+Web App/frontend/.vite/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# iOS App (Xcode / Swift)
+# ═══════════════════════════════════════════════════════════════════════════
+IOS App/build/
+IOS App/DerivedData/
+IOS App/**/xcuserdata/
+IOS App/**/*.xcuserstate
+IOS App/**/Pods/
+IOS App/**/Carthage/
+IOS App/**/.swiftpm/
+IOS App/**/*.xcworkspace/xcuserdata/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Android App (Gradle / Kotlin)
+# ═══════════════════════════════════════════════════════════════════════════
+Android App/.gradle/
+Android App/build/
+Android App/app/build/
+Android App/local.properties
+Android App/.idea/
+Android App/captures/
+Android App/.externalNativeBuild/
+Android App/.cxx/
+Android App/**/*.iml
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Logs / Temp
+# ═══════════════════════════════════════════════════════════════════════════
+*.log
+logs/
+tmp/
+temp/

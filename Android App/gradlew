@@ -1,0 +1,32 @@
+#!/bin/sh
+
+##############################################################################
+## Gradle wrapper script for UNIX
+##############################################################################
+
+APP_NAME="Gradle"
+APP_BASE_NAME=`basename "$0"`
+DIRNAME=`dirname "$0"`
+CLASSPATH=$DIRNAME/gradle/wrapper/gradle-wrapper.jar
+
+# Determine the Java command to use
+if [ -n "$JAVA_HOME" ] ; then
+    JAVACMD="$JAVA_HOME/bin/java"
+elif [ -n "$STUDIO_JDK" ] ; then
+    JAVACMD="$STUDIO_JDK/bin/java"
+else
+    JAVACMD="java"
+fi
+
+# Try Android Studio's bundled JDK if system java fails
+if ! command -v "$JAVACMD" > /dev/null 2>&1; then
+    STUDIO_JDK="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+    if [ -d "$STUDIO_JDK" ]; then
+        JAVACMD="$STUDIO_JDK/bin/java"
+    fi
+fi
+
+exec "$JAVACMD" \
+    -classpath "$CLASSPATH" \
+    org.gradle.wrapper.GradleWrapperMain \
+    "$@"
