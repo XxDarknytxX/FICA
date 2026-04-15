@@ -137,8 +137,8 @@ struct SplashView: View {
                 Spacer()
 
                 // Powered by Vodafone — icon fades in, wordmark slides out from behind it
-                PoweredByVodafone(iconHeight: 18, delay: 1.1)
-                    .padding(.bottom, 28)
+                PoweredByVodafone(iconHeight: 32, delay: 1.1)
+                    .padding(.bottom, 32)
             }
         }
         .onAppear {

@@ -331,8 +331,8 @@ struct LoginView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
 
-            // Powered by Vodafone — animated reveal on first appear
-            PoweredByVodafone(iconHeight: 16, delay: 0.3)
+            // Powered by Vodafone — static (no reveal) on the login page
+            PoweredByVodafone(iconHeight: 16, animated: false)
                 .padding(.top, 12)
         }
     }

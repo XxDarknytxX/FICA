@@ -4,17 +4,31 @@ import SwiftUI
 /// out from behind the circular icon.
 ///
 /// Usage:
-///     PoweredByVodafone()                  // auto-animates on appear
-///     PoweredByVodafone(delay: 1.1)        // with a start delay (splash)
-///     PoweredByVodafone(iconHeight: 18)    // bigger
+///     PoweredByVodafone()                          // animates on appear
+///     PoweredByVodafone(delay: 1.1)                // with a start delay (splash)
+///     PoweredByVodafone(iconHeight: 28)            // bigger
+///     PoweredByVodafone(animated: false)           // static, no reveal
 struct PoweredByVodafone: View {
     /// Height of both the icon and the wordmark (they share the same source height).
     var iconHeight: CGFloat = 16
     /// Delay before the animation starts firing on appear.
     var delay: Double = 0
+    /// Play the reveal animation on appear. When false, render in the final
+    /// (fully-revealed) state immediately — use on pages where the user will
+    /// see the element alongside other static content.
+    var animated: Bool = true
 
-    @State private var iconVisible = false
-    @State private var wordmarkRevealed = false
+    @State private var iconVisible: Bool
+    @State private var wordmarkRevealed: Bool
+
+    init(iconHeight: CGFloat = 16, delay: Double = 0, animated: Bool = true) {
+        self.iconHeight = iconHeight
+        self.delay = delay
+        self.animated = animated
+        // If not animated, jump straight to the final state.
+        _iconVisible = State(initialValue: !animated)
+        _wordmarkRevealed = State(initialValue: !animated)
+    }
 
     /// Roughly the icon's rendered width + a small gap (matches the original
     /// visual spacing in the combined Vodafone PNG).
@@ -48,6 +62,7 @@ struct PoweredByVodafone: View {
             }
         }
         .onAppear {
+            guard animated else { return }
             // Phase 1 — icon + "POWERED BY" label pop in together.
             withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(delay)) {
                 iconVisible = true
