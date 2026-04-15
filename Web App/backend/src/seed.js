@@ -105,18 +105,23 @@ async function seed() {
   console.log("✓ 35 sessions seeded (Congress 2025: 6–7 June 2025)");
 
   // ─── Sponsors (Congress 2025) ────────────────────────────────────────────
+  // Real 2026 sponsor roster reused for 2025 — the 2025 line-up wasn't provided,
+  // and these long-term partners are a reasonable stand-in while keeping test
+  // data consistent with 2026.
   await pool.query(`
     INSERT INTO sponsors (name, logo_url, website, tier, description, contact_name, contact_email, display_order, congress_year) VALUES
-    ('Vodafone Fiji', 'https://placehold.co/200x80/E60000/ffffff?text=Vodafone+Fiji', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a major sponsor providing digital connectivity and innovation across Fiji.', 'Vodafone Team', 'info@vodafone.com.fj', 1, 2025),
-    ('Asco Motors', 'https://placehold.co/200x80/1a365d/ffffff?text=Asco+Motors', 'https://ascomotors.com.fj', 'platinum', 'Asco Motors is a leading automotive distributor in Fiji.', 'Asco Team', 'info@ascomotors.com.fj', 2, 2025),
-    ('KPMG Fiji', 'https://placehold.co/200x80/00338D/ffffff?text=KPMG+Fiji', 'https://kpmg.com/fj', 'gold', 'KPMG provides audit, tax, and advisory services across Fiji and the Pacific.', 'KPMG Team', 'info@kpmg.com.fj', 1, 2025),
-    ('Deloitte Fiji', 'https://placehold.co/200x80/86BC25/ffffff?text=Deloitte+Fiji', 'https://deloitte.com/fj', 'gold', 'Deloitte Fiji is a leading professional services firm.', 'Deloitte Team', 'info@deloitte.com.fj', 2, 2025),
-    ('PricewaterhouseCoopers Fiji', 'https://placehold.co/200x80/D93954/ffffff?text=PwC+Fiji', 'https://pwc.com/fj', 'gold', 'PwC Fiji delivers assurance, advisory, and tax services.', 'PwC Team', 'info@pwc.com.fj', 3, 2025),
-    ('BSP Financial Group', 'https://placehold.co/200x80/004B8D/ffffff?text=BSP', 'https://bsp.com.fj', 'silver', 'BSP Financial Group is one of the largest banking groups in the Pacific.', 'BSP Team', 'info@bsp.com.fj', 1, 2025),
-    ('Fiji Airways', 'https://placehold.co/200x80/C8102E/ffffff?text=Fiji+Airways', 'https://fijiairways.com', 'silver', 'Fiji Airways is the Official Airline Partner of FICA Congress.', 'Fiji Airways Team', 'info@fijiairways.com', 2, 2025),
-    ('ANZ Bank Fiji', 'https://placehold.co/200x80/0F2D5E/C8A951?text=ANZ+Fiji', 'https://anz.com/fiji', 'silver', 'ANZ Bank has been serving Pacific communities for over 130 years.', 'ANZ Team', 'info@anz.com', 3, 2025)
+    ('Vodafone Fiji', '/sponsors/vodafone.png', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a Platinum Major Sponsor, providing digital connectivity and innovation across Fiji.', NULL, NULL, 1, 2025),
+    ('Asco Motors', '/sponsors/asco-motors.png', 'https://www.toyota-fiji.com', 'platinum', 'Asco Motors is a Platinum Major Sponsor and leading automotive distributor in Fiji — "Let''s Go with Asco!".', NULL, NULL, 2, 2025),
+    ('Extra Supermarket', '/sponsors/extra.png', 'https://extra.com.fj', 'gold', 'Extra Supermarket is the Gold Sponsor — a proudly Fijian-owned retail business.', NULL, NULL, 1, 2025),
+    ('Merchant Finance', '/sponsors/merchant-finance.png', 'https://merchantfinance.com.fj', 'bronze', 'Merchant Finance is a Bronze Sponsor and Fiji''s largest non-bank licensed credit institution.', NULL, NULL, 1, 2025),
+    ('Marsh', '/sponsors/marsh.png', 'https://www.marsh.com', 'bronze', 'Marsh is a Bronze Sponsor — a global leader in risk, reinsurance, and consulting.', NULL, NULL, 2, 2025),
+    ('Motibhai Group', '/sponsors/motibhai.png', 'https://www.motibhai.com', 'supporter', 'Motibhai Group is a Support Sponsor — a diversified Fijian corporate group established in 1931.', NULL, NULL, 1, 2025),
+    ('Chartered Accountants ANZ', '/sponsors/ca-anz.png', 'https://www.charteredaccountantsanz.com', 'supporter', 'CA ANZ is a Support Sponsor representing over 120,000 chartered accountants across Australia and New Zealand.', NULL, NULL, 2, 2025),
+    ('Datec Fiji', '/sponsors/datec.png', 'https://datec.com.fj', 'supporter', 'Datec is a Support Sponsor providing complete IT and E-Business solutions to Fiji and the South Pacific.', NULL, NULL, 3, 2025),
+    ('Fiji Airways', '/sponsors/fiji-airways.png', 'https://www.fijiairways.com', 'supporter', 'Fiji Airways is a Support Sponsor and the Official Airline Partner of FICA Congress.', NULL, NULL, 4, 2025),
+    ('The Fiji Times', '/sponsors/fiji-times.png', 'https://www.fijitimes.com.fj', 'media', 'The Fiji Times is the Official Media Partner of FICA Congress.', NULL, NULL, 1, 2025)
   `);
-  console.log("✓ 8 sponsors seeded (Congress 2025)");
+  console.log("✓ 10 sponsors seeded (Congress 2025)");
 
   // ─── Networking Slots (Congress 2025) ────────────────────────────────────
   await pool.query(`
@@ -206,18 +211,22 @@ async function seed() {
   console.log("✓ 35 sessions seeded (Congress 2026: 8–9 May 2026)");
 
   // ─── Sponsors (Congress 2026) ────────────────────────────────────────────
+  // Official FICA Congress 2026 sponsor roster. Tiers follow the printed
+  // programme: Platinum Major → Gold → Bronze → Support → Media Partner.
   await pool.query(`
     INSERT INTO sponsors (name, logo_url, website, tier, description, contact_name, contact_email, display_order, congress_year) VALUES
-    ('Vodafone Fiji', 'https://placehold.co/200x80/E60000/ffffff?text=Vodafone+Fiji', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a major sponsor of FICA Congress, providing digital connectivity and innovation across Fiji.', 'Vodafone Team', 'info@vodafone.com.fj', 1, 2026),
-    ('Asco Motors', 'https://placehold.co/200x80/1a365d/ffffff?text=Asco+Motors', 'https://ascomotors.com.fj', 'platinum', 'Asco Motors is a major sponsor and a leading automotive distributor in Fiji.', 'Asco Team', 'info@ascomotors.com.fj', 2, 2026),
-    ('KPMG Fiji', 'https://placehold.co/200x80/00338D/ffffff?text=KPMG+Fiji', 'https://kpmg.com/fj', 'gold', 'KPMG provides audit, tax, and advisory services across Fiji and the Pacific.', 'KPMG Team', 'info@kpmg.com.fj', 1, 2026),
-    ('Deloitte Fiji', 'https://placehold.co/200x80/86BC25/ffffff?text=Deloitte+Fiji', 'https://deloitte.com/fj', 'gold', 'Deloitte Fiji is a leading professional services firm.', 'Deloitte Team', 'info@deloitte.com.fj', 2, 2026),
-    ('PricewaterhouseCoopers Fiji', 'https://placehold.co/200x80/D93954/ffffff?text=PwC+Fiji', 'https://pwc.com/fj', 'gold', 'PwC Fiji delivers assurance, advisory, and tax services.', 'PwC Team', 'info@pwc.com.fj', 3, 2026),
-    ('BSP Financial Group', 'https://placehold.co/200x80/004B8D/ffffff?text=BSP', 'https://bsp.com.fj', 'silver', 'BSP Financial Group is one of the largest banking groups in the Pacific.', 'BSP Team', 'info@bsp.com.fj', 1, 2026),
-    ('Fiji Airways', 'https://placehold.co/200x80/C8102E/ffffff?text=Fiji+Airways', 'https://fijiairways.com', 'silver', 'Fiji Airways is the Official Airline Partner of FICA Congress.', 'Fiji Airways Team', 'info@fijiairways.com', 2, 2026),
-    ('ANZ Bank Fiji', 'https://placehold.co/200x80/0F2D5E/C8A951?text=ANZ+Fiji', 'https://anz.com/fiji', 'silver', 'ANZ Bank has been serving Pacific communities for over 130 years.', 'ANZ Team', 'info@anz.com', 3, 2026)
+    ('Vodafone Fiji', '/sponsors/vodafone.png', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a Platinum Major Sponsor, providing digital connectivity and innovation across Fiji.', NULL, NULL, 1, 2026),
+    ('Asco Motors', '/sponsors/asco-motors.png', 'https://www.toyota-fiji.com', 'platinum', 'Asco Motors is a Platinum Major Sponsor and leading automotive distributor in Fiji — "Let''s Go with Asco!".', NULL, NULL, 2, 2026),
+    ('Extra Supermarket', '/sponsors/extra.png', 'https://extra.com.fj', 'gold', 'Extra Supermarket is the Gold Sponsor — a proudly Fijian-owned retail business.', NULL, NULL, 1, 2026),
+    ('Merchant Finance', '/sponsors/merchant-finance.png', 'https://merchantfinance.com.fj', 'bronze', 'Merchant Finance is a Bronze Sponsor and Fiji''s largest non-bank licensed credit institution.', NULL, NULL, 1, 2026),
+    ('Marsh', '/sponsors/marsh.png', 'https://www.marsh.com', 'bronze', 'Marsh is a Bronze Sponsor — a global leader in risk, reinsurance, and consulting.', NULL, NULL, 2, 2026),
+    ('Motibhai Group', '/sponsors/motibhai.png', 'https://www.motibhai.com', 'supporter', 'Motibhai Group is a Support Sponsor — a diversified Fijian corporate group established in 1931.', NULL, NULL, 1, 2026),
+    ('Chartered Accountants ANZ', '/sponsors/ca-anz.png', 'https://www.charteredaccountantsanz.com', 'supporter', 'CA ANZ is a Support Sponsor representing over 120,000 chartered accountants across Australia and New Zealand.', NULL, NULL, 2, 2026),
+    ('Datec Fiji', '/sponsors/datec.png', 'https://datec.com.fj', 'supporter', 'Datec is a Support Sponsor providing complete IT and E-Business solutions to Fiji and the South Pacific.', NULL, NULL, 3, 2026),
+    ('Fiji Airways', '/sponsors/fiji-airways.png', 'https://www.fijiairways.com', 'supporter', 'Fiji Airways is a Support Sponsor and the Official Airline Partner of FICA Congress.', NULL, NULL, 4, 2026),
+    ('The Fiji Times', '/sponsors/fiji-times.png', 'https://www.fijitimes.com.fj', 'media', 'The Fiji Times is the Official Media Partner of FICA Congress.', NULL, NULL, 1, 2026)
   `);
-  console.log("✓ 8 sponsors seeded (Congress 2026)");
+  console.log("✓ 10 sponsors seeded (Congress 2026)");
 
   // ─── Networking Slots (Congress 2026) ────────────────────────────────────
   await pool.query(`
