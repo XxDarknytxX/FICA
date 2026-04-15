@@ -70,4 +70,8 @@ dependencies {
 
     // Core
     implementation("androidx.core:core-ktx:1.15.0")
+    // Controls the Android 12+ system splash screen so it matches our
+    // Composable splash (white background, transparent icon) instead of
+    // showing the launcher icon on top of it.
+    implementation("androidx.core:core-splashscreen:1.0.1")
 }

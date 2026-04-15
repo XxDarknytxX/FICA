@@ -4,4 +4,19 @@
         <item name="android:statusBarColor">@color/fica_navy_solid</item>
         <item name="android:navigationBarColor">@color/white</item>
     </style>
+
+    <!--
+        Launch theme used for MainActivity so we can control the Android 12+
+        system splash screen. White background + transparent icon makes the
+        OS splash a brief white flash that hands off cleanly into our
+        Composable SplashScreen (which draws the animated FICA logo itself).
+        Without this, Android 12+ shows the launcher icon centered on a
+        default background before our Compose UI starts — the double-splash
+        the user was seeing.
+    -->
+    <style name="Theme.FICAEvents.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_transparent</item>
+        <item name="postSplashScreenTheme">@style/Theme.FICAEvents</item>
+    </style>
 </resources>
