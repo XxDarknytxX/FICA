@@ -366,8 +366,10 @@ private fun HeroCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             HeroInfoPill(
+                // Explicit line break so "Fiji" drops to line two and the
+                // venue name no longer crowds the right-side divider.
                 icon = Icons.Filled.Place,
-                text = "Crowne Plaza Fiji",
+                text = "Crowne Plaza\nFiji",
                 modifier = Modifier.weight(1f),
             )
             HeroDivider()
@@ -445,10 +447,12 @@ private fun HeroInfoPill(
 
 @Composable
 private fun HeroDivider() {
+    // Taller than before so it still reads as a balanced separator when the
+    // Place pill wraps to two lines ("Crowne Plaza\nFiji").
     Box(
         modifier = Modifier
             .width(1.dp)
-            .height(32.dp)
+            .height(44.dp)
             .background(Color.White.copy(alpha = 0.15f)),
     )
 }
