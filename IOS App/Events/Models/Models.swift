@@ -101,6 +101,18 @@ struct Session: Codable, Identifiable {
     let display_order: Int?
     let congress_year: Int?
     let session_group: String?
+
+    // Backend returns `type` (DB column name); map it to `session_type` so
+    // agenda filters (keynote/panel/etc.) and type labels decode correctly.
+    // Android handles this via @SerializedName("type") on its Session model.
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+        case session_date, start_time, end_time
+        case location
+        case session_type = "type"
+        case speaker_id, speaker_name, speaker_title, speaker_photo
+        case display_order, congress_year, session_group
+    }
 }
 
 // MARK: - Session Group (themed tracks)
