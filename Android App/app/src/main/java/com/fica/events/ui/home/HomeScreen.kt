@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.imageLoader
@@ -921,6 +922,15 @@ private fun EventCard(event: NetworkingEvent) {
 
 @Composable
 private fun SponsorsSection(sponsors: List<Sponsor>, onSeeAll: (() -> Unit)?) {
+    // Size each card so exactly three fit across the viewport, matching the
+    // iOS Home layout's `containerRelativeFrame(count: 3)`. Cards end up
+    // wider than tall — a horizontal rectangle — with the logo filling the
+    // full card width instead of a smaller inset square.
+    val horizontalPadding = 20.dp
+    val cardSpacing = 12.dp
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    val cardWidth = (screenWidth - horizontalPadding * 2 - cardSpacing * 2) / 3
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader(
             title = "Sponsors",
@@ -928,78 +938,73 @@ private fun SponsorsSection(sponsors: List<Sponsor>, onSeeAll: (() -> Unit)?) {
             onAction = onSeeAll,
         )
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(start = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(cardSpacing),
+            contentPadding = PaddingValues(horizontal = horizontalPadding),
         ) {
             items(sponsors, key = { it.id }) { sponsor ->
-                SponsorCard(sponsor = sponsor)
+                SponsorCard(
+                    sponsor = sponsor,
+                    modifier = Modifier.width(cardWidth),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SponsorCard(sponsor: Sponsor) {
+private fun SponsorCard(sponsor: Sponsor, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
-            .width(110.dp)
-            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
-            .background(FICACard, RoundedCornerShape(14.dp))
-            .padding(vertical = 14.dp, horizontal = 10.dp),
+        modifier = modifier
+            .shadow(1.5.dp, RoundedCornerShape(12.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .background(FICACard, RoundedCornerShape(12.dp))
+            .padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Logo slot — real logo via Coil when logo_url is set, 2-letter
-        // initials fallback for empty/null URLs. Mirrors SponsorsScreen so
-        // the home-screen card and the full sponsors page render the same
-        // way; previously the home card only ever showed the placeholder.
+        // Logo slot — full card width, 42dp tall so the card reads as a
+        // horizontal rectangle. Logo loaded via Coil when logo_url is set,
+        // 2-letter initials as fallback otherwise.
         Box(
             modifier = Modifier
-                .size(width = 72.dp, height = 56.dp)
-                .background(FICAInputBg, RoundedCornerShape(12.dp)),
+                .fillMaxWidth()
+                .height(42.dp)
+                .background(FICAInputBg, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (!sponsor.logo_url.isNullOrBlank()) {
                 AsyncImage(
                     model = sponsor.logo_url,
                     contentDescription = sponsor.name,
-                    modifier = Modifier.fillMaxSize().padding(6.dp),
+                    modifier = Modifier.fillMaxSize().padding(5.dp),
                     contentScale = ContentScale.Fit,
                 )
             } else {
                 Text(
                     text = sponsor.name.take(2).uppercase(),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
                     color = FICANavy,
-                    lineHeight = 24.sp,
                 )
             }
         }
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+        Text(
+            text = sponsor.name,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = FICAText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            lineHeight = 12.sp,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text = sponsor.name,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = FICAText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                lineHeight = 15.sp,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                text = sponsor.tier?.replaceFirstChar { it.uppercase() } ?: "",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = FICAGold,
-                textAlign = TextAlign.Center,
-                lineHeight = 13.sp,
-            )
-        }
+        )
+        Text(
+            text = sponsor.tier?.replaceFirstChar { it.uppercase() } ?: "",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = FICAGold,
+            textAlign = TextAlign.Center,
+            lineHeight = 11.sp,
+        )
     }
 }
