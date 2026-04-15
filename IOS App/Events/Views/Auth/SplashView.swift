@@ -136,10 +136,10 @@ struct SplashView: View {
 
                 Spacer()
 
-                // Vodafone — icon pops in, wordmark slides out from behind it.
-                // No "POWERED BY" label on the splash: big, neat, hero-style placement.
-                PoweredByVodafone(iconHeight: 44, delay: 1.1, showLabel: false)
-                    .padding(.bottom, 36)
+                // Small "POWERED BY" + Vodafone circle icon, same scale as the login page.
+                // Wordmark hidden here — clean and quiet at the bottom of the splash.
+                PoweredByVodafone(iconHeight: 16, delay: 1.1, showWordmark: false)
+                    .padding(.bottom, 28)
             }
         }
         .onAppear {
