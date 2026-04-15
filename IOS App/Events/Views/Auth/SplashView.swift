@@ -138,7 +138,9 @@ struct SplashView: View {
 
                 // Small "POWERED BY" + Vodafone circle icon, same scale as the login page.
                 // Wordmark hidden here — clean and quiet at the bottom of the splash.
-                PoweredByVodafone(iconHeight: 16, delay: 1.1, showWordmark: false)
+                // Fires mid-sequence (0.5s) so it lands alongside the tagline, not
+                // at the tail end of the splash.
+                PoweredByVodafone(iconHeight: 16, delay: 0.5, showWordmark: false)
                     .padding(.bottom, 28)
             }
         }
@@ -193,7 +195,7 @@ struct SplashView: View {
         // via its own onAppear + delay — no code needed here.
 
         // Phase 9: Dismiss
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
             onFinished()
         }
     }
