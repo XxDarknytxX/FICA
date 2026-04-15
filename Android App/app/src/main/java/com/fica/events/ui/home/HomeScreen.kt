@@ -987,24 +987,27 @@ private fun SponsorCard(sponsor: Sponsor, modifier: Modifier = Modifier) {
                 )
             }
         }
+        // Type sizes mirror SpeakerCard (13sp name / 11sp secondary) so the
+        // home-screen cards read as a uniform family — Sponsors was an
+        // outlier at 10/9sp and looked cramped next to Speakers/Sessions.
         Text(
             text = sponsor.name,
-            fontSize = 10.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             color = FICAText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            lineHeight = 12.sp,
+            lineHeight = 15.sp,
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text = sponsor.tier?.replaceFirstChar { it.uppercase() } ?: "",
-            fontSize = 9.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = FICAGold,
             textAlign = TextAlign.Center,
-            lineHeight = 11.sp,
+            lineHeight = 13.sp,
         )
     }
 }
