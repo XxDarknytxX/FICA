@@ -356,7 +356,16 @@ struct HomeView: View {
     // MARK: - Load
 
     private func load() async {
-        isLoading = true
+        // Only show the skeleton loader when we genuinely have nothing on screen
+        // yet — i.e. the very first load. On pull-to-refresh or silent re-fetches,
+        // keep the existing content visible and just swap in fresh data once it
+        // arrives, so the user never sees a loader flash over data that's already
+        // there.
+        let isFirstLoad = sessions.isEmpty && speakers.isEmpty &&
+                          announcements.isEmpty && sponsors.isEmpty &&
+                          networkingEvents.isEmpty
+        if isFirstLoad { isLoading = true }
+
         let currentYear = CongressYear.y2026.rawValue
         async let s = APIService.shared.getSessions(year: currentYear)
         async let sp = APIService.shared.getSpeakers(year: currentYear)
