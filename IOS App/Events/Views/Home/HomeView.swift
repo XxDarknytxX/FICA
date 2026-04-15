@@ -389,30 +389,19 @@ struct HomeView: View {
 
     private func sponsorCard(_ sp: Sponsor) -> some View {
         VStack(spacing: 6) {
-            // Logo slot — AsyncImage when logo_url is set, 2-letter initials
-            // as placeholder while loading or when no URL is available.
+            // Logo slot — CachedImage reads from ImageCache (preloaded by
+            // load()) so the logo paints on the same frame as the card.
+            // Falls back to the 2-letter initials placeholder on cache miss.
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.ficaInputBg)
                 .frame(height: 42)
                 .overlay(
-                    Group {
-                        if let urlStr = sp.logo_url, let url = URL(string: urlStr) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().scaledToFit().padding(5)
-                                default:
-                                    Text(String(sp.name.prefix(2)).uppercased())
-                                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                                        .foregroundStyle(Color.ficaNavy)
-                                }
-                            }
-                        } else {
-                            Text(String(sp.name.prefix(2)).uppercased())
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.ficaNavy)
-                        }
+                    CachedImage(url: sp.logo_url.flatMap(URL.init), contentMode: .fit) {
+                        Text(String(sp.name.prefix(2)).uppercased())
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.ficaNavy)
                     }
+                    .padding(5)
                 )
             Text(sp.name)
                 .font(.system(size: 10, weight: .semibold))
@@ -457,19 +446,28 @@ struct HomeView: View {
         let sponsorsRes      = (try? await spon) ?? []
         let eventsRes        = (try? await ne)   ?? []
 
-        // Unique image URLs across sponsors, speakers, and session speaker
-        // thumbnails. Using a Set dedupes when the same speaker appears in
-        // multiple sessions.
+        // Unique image URLs across sponsors, speakers, session speaker
+        // thumbnails, and the keynote-row avatar placeholders. Set dedupes
+        // when the same speaker shows up in multiple sessions.
         var urlStrings = Set<String>()
         sponsorsRes.forEach { if let u = $0.logo_url { urlStrings.insert(u) } }
         speakersRes.forEach { if let u = $0.photo_url { urlStrings.insert(u) } }
         sessionsRes.forEach { if let u = $0.speaker_photo { urlStrings.insert(u) } }
+        // Avatar fallbacks (ui-avatars.com) for speakers without a photo —
+        // AvatarView routes through the same CachedImage so preloading the
+        // generated URL makes the speaker strip paint with no avatar fade.
+        for sp in speakersRes where sp.isKeynote {
+            urlStrings.insert(avatarURL(name: sp.name, photo: sp.photo_url, size: 128).absoluteString)
+        }
+        for s in sessionsRes where s.speaker_name != nil {
+            urlStrings.insert(avatarURL(name: s.speaker_name!, photo: s.speaker_photo, size: 56).absoluteString)
+        }
         let urls = urlStrings.compactMap(URL.init)
-        await Self.prefetchImages(urls)
+        await ImageCache.shared.preload(urls)
 
         // Cache is warm — commit state. The single opacity animation driven
         // by isLoading fades the whole dashboard in with all imagery already
-        // decoded and ready.
+        // decoded in memory, ready for `Image(uiImage:)` to draw in frame.
         sessions = sessionsRes
         speakers = speakersRes
         announcements = announcementsRes
@@ -477,29 +475,5 @@ struct HomeView: View {
         networkingEvents = eventsRes
         isLoading = false
         await auth.refreshProfile()
-    }
-
-    /// Warms URLCache with the given image URLs in parallel. AsyncImage uses
-    /// URLSession.shared under the hood, which respects the shared URLCache,
-    /// so after this call the home-screen avatars and sponsor logos render
-    /// from cache on their first appearance.
-    ///
-    /// Each request is capped at 10s so a slow image doesn't hold up the
-    /// whole dashboard — if prefetch fails, AsyncImage falls back to an
-    /// on-appear fetch just as before.
-    private static func prefetchImages(_ urls: [URL]) async {
-        guard !urls.isEmpty else { return }
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
-        config.urlCache = URLCache.shared
-        config.requestCachePolicy = .returnCacheDataElseLoad
-        let session = URLSession(configuration: config)
-        await withTaskGroup(of: Void.self) { group in
-            for url in urls {
-                group.addTask {
-                    _ = try? await session.data(from: url)
-                }
-            }
-        }
     }
 }

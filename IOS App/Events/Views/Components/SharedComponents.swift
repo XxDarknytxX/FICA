@@ -37,17 +37,18 @@ struct AvatarView: View {
     var borderWidth: CGFloat = 2
 
     var body: some View {
-        AsyncImage(url: avatarURL(name: name, photo: photo, size: Int(size * 2))) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
-            default:
-                Color.ficaNavy.overlay(
-                    Text(String(name.prefix(1)).uppercased())
-                        .font(.system(size: size * 0.38, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.ficaGold)
-                )
-            }
+        // Use CachedImage so preloaded avatars paint on first frame with no
+        // fade. Falls back to the initials placeholder on cache miss or
+        // network failure.
+        CachedImage(
+            url: avatarURL(name: name, photo: photo, size: Int(size * 2)),
+            contentMode: .fill
+        ) {
+            Color.ficaNavy.overlay(
+                Text(String(name.prefix(1)).uppercased())
+                    .font(.system(size: size * 0.38, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.ficaGold)
+            )
         }
         .frame(width: size, height: size)
         .clipShape(Circle())

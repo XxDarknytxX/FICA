@@ -63,31 +63,18 @@ struct SponsorsView: View {
 
     private func sponsorCard(_ sp: Sponsor, tier: String) -> some View {
         HStack(spacing: 14) {
-            // Logo slot — renders the real logo via AsyncImage when logo_url
-            // is present, falling back to the 2-letter initials placeholder
-            // while loading or when no URL is set.
+            // Logo slot — CachedImage reads from ImageCache (preloaded by
+            // load()) so the logo paints on the same frame as the row.
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.ficaInputBg)
                 .frame(width: 56, height: 42)
                 .overlay(
-                    Group {
-                        if let urlStr = sp.logo_url, let url = URL(string: urlStr) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().scaledToFit().padding(6)
-                                default:
-                                    Text(String(sp.name.prefix(2)).uppercased())
-                                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                                        .foregroundStyle(Color.ficaNavy)
-                                }
-                            }
-                        } else {
-                            Text(String(sp.name.prefix(2)).uppercased())
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.ficaNavy)
-                        }
+                    CachedImage(url: sp.logo_url.flatMap(URL.init), contentMode: .fit) {
+                        Text(String(sp.name.prefix(2)).uppercased())
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.ficaNavy)
                     }
+                    .padding(6)
                 )
             VStack(alignment: .leading, spacing: 3) {
                 Text(sp.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.ficaText)
@@ -115,21 +102,10 @@ struct SponsorsView: View {
         isLoading = sponsors.isEmpty
         let fetched = (try? await APIService.shared.getSponsors()) ?? []
 
-        // Prefetch every logo into URLCache before committing state so the
-        // list renders once with all images ready — no per-card streaming.
+        // Preload every logo into the shared ImageCache before committing
+        // state, so the list paints in one frame with all logos visible.
         let urls = Array(Set(fetched.compactMap { $0.logo_url })).compactMap(URL.init)
-        if !urls.isEmpty {
-            let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = 10
-            config.urlCache = URLCache.shared
-            config.requestCachePolicy = .returnCacheDataElseLoad
-            let session = URLSession(configuration: config)
-            await withTaskGroup(of: Void.self) { group in
-                for url in urls {
-                    group.addTask { _ = try? await session.data(from: url) }
-                }
-            }
-        }
+        await ImageCache.shared.preload(urls)
 
         sponsors = fetched
         isLoading = false
