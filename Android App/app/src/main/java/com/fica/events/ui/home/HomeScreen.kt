@@ -63,7 +63,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import kotlinx.coroutines.awaitAll
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -158,6 +163,7 @@ fun HomeScreen(
 
     val user = AuthManager.currentUser
     val firstName = user?.name?.split(" ")?.firstOrNull() ?: "Delegate"
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         isLoading = true
@@ -170,11 +176,49 @@ fun HomeScreen(
                 val sponsorsDeferred = async { ApiClient.service.getSponsors(year = currentYear) }
                 val eventsDeferred = async { ApiClient.service.getNetworkingEvents(year = currentYear) }
 
-                sessions = sessionsDeferred.await().body()?.sessions ?: emptyList()
-                speakers = speakersDeferred.await().body()?.speakers ?: emptyList()
-                announcements = announcementsDeferred.await().body()?.announcements ?: emptyList()
-                sponsors = sponsorsDeferred.await().body()?.sponsors ?: emptyList()
-                networkingEvents = eventsDeferred.await().body()?.slots ?: emptyList()
+                // Materialize data first; don't commit to state yet so the
+                // skeleton stays up while we warm the image cache.
+                val sessionsData = sessionsDeferred.await().body()?.sessions ?: emptyList()
+                val speakersData = speakersDeferred.await().body()?.speakers ?: emptyList()
+                val announcementsData = announcementsDeferred.await().body()?.announcements ?: emptyList()
+                val sponsorsData = sponsorsDeferred.await().body()?.sponsors ?: emptyList()
+                val eventsData = eventsDeferred.await().body()?.slots ?: emptyList()
+
+                // Every remote image URL the dashboard will render. Deduped
+                // because the same speaker photo shows up in both the
+                // Keynotes strip and session cards.
+                val imageUrls = (
+                    sponsorsData.mapNotNull { it.logo_url?.takeIf(String::isNotBlank) } +
+                    speakersData.mapNotNull { it.photo_url?.takeIf(String::isNotBlank) } +
+                    sessionsData.mapNotNull { it.speaker_photo?.takeIf(String::isNotBlank) }
+                ).distinct()
+
+                // Warm Coil's memory + disk cache in parallel. AsyncImage
+                // will hit cache on first composition instead of showing a
+                // blank box and streaming the image in. Failures are
+                // tolerated — if a URL can't be prefetched, AsyncImage
+                // still attempts to load it on-appear.
+                if (imageUrls.isNotEmpty()) {
+                    val loader = context.imageLoader
+                    imageUrls.map { url ->
+                        async {
+                            val req = ImageRequest.Builder(context)
+                                .data(url)
+                                .memoryCachePolicy(CachePolicy.ENABLED)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .build()
+                            loader.execute(req)
+                        }
+                    }.awaitAll()
+                }
+
+                // Cache is warm — commit state so the dashboard paints
+                // once with all imagery already decoded.
+                sessions = sessionsData
+                speakers = speakersData
+                announcements = announcementsData
+                sponsors = sponsorsData
+                networkingEvents = eventsData
             }
         } catch (_: Exception) { }
         isLoading = false

@@ -48,10 +48,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import com.fica.events.data.api.ApiClient
 import com.fica.events.data.models.CongressYear
 import com.fica.events.data.models.Sponsor
@@ -91,11 +98,33 @@ fun SponsorsScreen(onBack: () -> Unit) {
     var selectedSponsor by remember { mutableStateOf<Sponsor?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     suspend fun load() {
         try {
             val resp = ApiClient.service.getSponsors(year = CongressYear.Y2026.year)
-            sponsors = resp.body()?.sponsors ?: emptyList()
+            val fetched = resp.body()?.sponsors ?: emptyList()
+
+            // Warm Coil's cache for every logo before committing state, so
+            // the sponsor list paints once with logos already decoded.
+            val urls = fetched.mapNotNull { it.logo_url?.takeIf(String::isNotBlank) }.distinct()
+            if (urls.isNotEmpty()) {
+                val loader = context.imageLoader
+                coroutineScope {
+                    urls.map { url ->
+                        async {
+                            val req = ImageRequest.Builder(context)
+                                .data(url)
+                                .memoryCachePolicy(CachePolicy.ENABLED)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .build()
+                            loader.execute(req)
+                        }
+                    }.awaitAll()
+                }
+            }
+
+            sponsors = fetched
         } catch (_: Exception) { }
     }
 

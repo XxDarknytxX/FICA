@@ -113,7 +113,25 @@ struct SponsorsView: View {
 
     private func load() async {
         isLoading = sponsors.isEmpty
-        sponsors = (try? await APIService.shared.getSponsors()) ?? []
+        let fetched = (try? await APIService.shared.getSponsors()) ?? []
+
+        // Prefetch every logo into URLCache before committing state so the
+        // list renders once with all images ready — no per-card streaming.
+        let urls = Array(Set(fetched.compactMap { $0.logo_url })).compactMap(URL.init)
+        if !urls.isEmpty {
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 10
+            config.urlCache = URLCache.shared
+            config.requestCachePolicy = .returnCacheDataElseLoad
+            let session = URLSession(configuration: config)
+            await withTaskGroup(of: Void.self) { group in
+                for url in urls {
+                    group.addTask { _ = try? await session.data(from: url) }
+                }
+            }
+        }
+
+        sponsors = fetched
         isLoading = false
     }
 }

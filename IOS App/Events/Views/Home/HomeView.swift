@@ -447,12 +447,59 @@ struct HomeView: View {
         async let a = APIService.shared.getAnnouncements()
         async let spon = APIService.shared.getSponsors(year: currentYear)
         async let ne = APIService.shared.getNetworkingEvents(year: currentYear)
-        sessions = (try? await s) ?? []
-        speakers = (try? await sp) ?? []
-        announcements = (try? await a) ?? []
-        sponsors = (try? await spon) ?? []
-        networkingEvents = (try? await ne) ?? []
+
+        // Collect results first so we can prefetch images BEFORE committing
+        // state. That way AsyncImage renders from URLCache on first paint
+        // rather than kicking off a network fetch per card at render time.
+        let sessionsRes      = (try? await s)    ?? []
+        let speakersRes      = (try? await sp)   ?? []
+        let announcementsRes = (try? await a)    ?? []
+        let sponsorsRes      = (try? await spon) ?? []
+        let eventsRes        = (try? await ne)   ?? []
+
+        // Unique image URLs across sponsors, speakers, and session speaker
+        // thumbnails. Using a Set dedupes when the same speaker appears in
+        // multiple sessions.
+        var urlStrings = Set<String>()
+        sponsorsRes.forEach { if let u = $0.logo_url { urlStrings.insert(u) } }
+        speakersRes.forEach { if let u = $0.photo_url { urlStrings.insert(u) } }
+        sessionsRes.forEach { if let u = $0.speaker_photo { urlStrings.insert(u) } }
+        let urls = urlStrings.compactMap(URL.init)
+        await Self.prefetchImages(urls)
+
+        // Cache is warm — commit state. The single opacity animation driven
+        // by isLoading fades the whole dashboard in with all imagery already
+        // decoded and ready.
+        sessions = sessionsRes
+        speakers = speakersRes
+        announcements = announcementsRes
+        sponsors = sponsorsRes
+        networkingEvents = eventsRes
         isLoading = false
         await auth.refreshProfile()
+    }
+
+    /// Warms URLCache with the given image URLs in parallel. AsyncImage uses
+    /// URLSession.shared under the hood, which respects the shared URLCache,
+    /// so after this call the home-screen avatars and sponsor logos render
+    /// from cache on their first appearance.
+    ///
+    /// Each request is capped at 10s so a slow image doesn't hold up the
+    /// whole dashboard — if prefetch fails, AsyncImage falls back to an
+    /// on-appear fetch just as before.
+    private static func prefetchImages(_ urls: [URL]) async {
+        guard !urls.isEmpty else { return }
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        config.urlCache = URLCache.shared
+        config.requestCachePolicy = .returnCacheDataElseLoad
+        let session = URLSession(configuration: config)
+        await withTaskGroup(of: Void.self) { group in
+            for url in urls {
+                group.addTask {
+                    _ = try? await session.data(from: url)
+                }
+            }
+        }
     }
 }
