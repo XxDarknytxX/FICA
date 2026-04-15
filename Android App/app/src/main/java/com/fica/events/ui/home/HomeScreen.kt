@@ -521,10 +521,13 @@ private fun StatItem(
         )
         Text(
             text = value,
-            fontSize = 26.sp,
+            // 20sp matches the iOS stat pill (was 26sp — looked chunky next
+            // to the rest of the dashboard typography). Keeps Black weight
+            // so the number still reads as the primary element of the pill.
+            fontSize = 20.sp,
             fontWeight = FontWeight.Black,
             color = FICAText,
-            lineHeight = 30.sp,
+            lineHeight = 24.sp,
         )
         Text(
             text = label,
