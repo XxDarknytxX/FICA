@@ -9,8 +9,7 @@
         android:allowBackup="true"
         android:label="FICA Events"
         android:supportsRtl="true"
-        android:theme="@style/Theme.FICAEvents"
-        android:usesCleartextTraffic="true">
+        android:theme="@style/Theme.FICAEvents">
 
         <activity
             android:name=".MainActivity"

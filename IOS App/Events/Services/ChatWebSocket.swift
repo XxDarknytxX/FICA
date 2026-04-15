@@ -14,11 +14,9 @@ final class ChatWebSocket {
     // Global handler for chat list updates
     var onAnyMessage: ((Message) -> Void)?
 
-    #if targetEnvironment(simulator)
-    private let wsURL = "ws://localhost:5000/ws"
-    #else
-    private let wsURL = "ws://localhost:5000/ws"
-    #endif
+    // Production WebSocket — wss://eventsfiji.cloud/ws (Nginx proxies to backend on :5000)
+    // For local dev, flip to "ws://localhost:5000/ws" (simulator) or your LAN IP (device).
+    private let wsURL = "wss://eventsfiji.cloud/ws"
 
     func connect(userId: Int) {
         guard !isConnected else { return }

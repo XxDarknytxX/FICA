@@ -3,11 +3,10 @@ import Foundation
 actor APIService {
     static let shared = APIService()
 
-    #if targetEnvironment(simulator)
-    private let baseURL = "http://localhost:5000/api"
-    #else
-    private let baseURL = "http://localhost:5000/api"
-    #endif
+    // Production backend — https://eventsfiji.cloud
+    // For local dev, flip to "http://localhost:5000/api" (simulator) or your LAN IP (device)
+    // and add an NSAppTransportSecurity exception to Info.plist.
+    private let baseURL = "https://eventsfiji.cloud/api"
 
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()

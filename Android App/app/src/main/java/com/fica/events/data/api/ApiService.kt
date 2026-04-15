@@ -107,7 +107,10 @@ interface ApiService {
 
 object ApiClient {
 
-    private const val BASE_URL = "http://10.0.2.2:5000/api/"
+    // Production backend — https://eventsfiji.cloud
+    // For local dev against the emulator, swap to "http://10.0.2.2:5000/api/"
+    // (and re-add android:usesCleartextTraffic="true" in AndroidManifest.xml).
+    private const val BASE_URL = "https://eventsfiji.cloud/api/"
 
     var authToken: String? = null
 

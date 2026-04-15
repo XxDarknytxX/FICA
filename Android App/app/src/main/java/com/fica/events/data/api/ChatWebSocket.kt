@@ -11,7 +11,9 @@ import okhttp3.WebSocketListener
 
 object ChatWebSocket {
 
-    private const val WS_URL = "ws://10.0.2.2:5000/ws"
+    // Production WebSocket — wss://eventsfiji.cloud/ws (Nginx proxies to backend on :5000)
+    // For local dev against the emulator, swap to "ws://10.0.2.2:5000/ws".
+    private const val WS_URL = "wss://eventsfiji.cloud/ws"
 
     private var webSocket: WebSocket? = null
     private var userId: Int? = null
