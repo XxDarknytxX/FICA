@@ -627,7 +627,7 @@ private fun ConnectionsContent() {
 
     LaunchedEffect(Unit) { loadConnections() }
 
-    val filters = listOf("all", "pending", "accepted", "declined")
+    val filters = listOf("all", "pending", "accepted")
     val filtered = if (filter == "all") connections else connections.filter { it.status == filter }
 
     Column(modifier = Modifier.fillMaxSize().background(FICABg)) {
