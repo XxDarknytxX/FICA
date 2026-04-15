@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Save, Settings as SettingsIcon, Globe, Phone, Mail, Calendar, MapPin, Smartphone, Users } from "lucide-react";
+import {
+  Save, Settings as SettingsIcon, Globe, Phone, Mail, Calendar, MapPin,
+  Smartphone, Users, Send, CheckCircle2, AlertCircle, Lock,
+} from "lucide-react";
 import Layout from "../components/Layout";
 import PageHeader from "../components/PageHeader";
 import { api } from "../services/api";
@@ -38,12 +41,26 @@ const SETTING_FIELDS = [
   },
 ];
 
+const SMTP_FIELDS = [
+  { key: "smtp_host", label: "SMTP Host", placeholder: "smtp.gmail.com", type: "text", half: true },
+  { key: "smtp_port", label: "SMTP Port", placeholder: "587", type: "number", half: true },
+  { key: "smtp_user", label: "SMTP Username", placeholder: "noreply@fica.org.fj", type: "text", half: true },
+  { key: "smtp_pass", label: "SMTP Password / App Password", placeholder: "••••••••", type: "password", half: true },
+  { key: "smtp_from_email", label: "From Email", placeholder: "noreply@fica.org.fj", type: "email", half: true },
+  { key: "smtp_from_name", label: "From Name", placeholder: "FICA Congress 2026", type: "text", half: true },
+];
+
 export default function Settings() {
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
+
+  // SMTP test
+  const [testTo, setTestTo] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null); // { kind, message }
 
   useEffect(() => {
     async function load() {
@@ -71,12 +88,33 @@ export default function Settings() {
     }
   }
 
+  async function sendTest() {
+    if (!testTo) {
+      setTestResult({ kind: "error", message: "Enter an email to send the test to" });
+      return;
+    }
+    setTesting(true); setTestResult(null);
+    try {
+      // Save first so the latest SMTP values are used
+      await api("/event/settings", { method: "PUT", body: { settings } });
+      const { message } = await api("/event/settings/test-smtp", {
+        method: "POST",
+        body: { to: testTo },
+      });
+      setTestResult({ kind: "success", message: message || "Test email sent" });
+    } catch (e) {
+      setTestResult({ kind: "error", message: e.message });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <Layout>
       <div style={{ padding: 28 }} className="animate-in">
         <PageHeader
           title="Settings"
-          subtitle="Configure FICA Congress 2026 event details, venue, and mobile app settings"
+          subtitle="Configure FICA Congress 2026 event details, venue, and email delivery"
           action={
             <button className="btn-gold" onClick={save} disabled={saving}>
               <Save size={15} /> {saving ? "Saving..." : "Save Settings"}
@@ -121,6 +159,102 @@ export default function Settings() {
                 </div>
               </div>
             ))}
+
+            {/* ─── Email / SMTP Configuration ─────────────────────────────── */}
+            <div className="card" style={{ padding: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, paddingBottom: 14, borderBottom: "1px solid #e2e8f0" }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: "#7c3aed18", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Mail size={16} color="#7c3aed" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a202c" }}>Email / SMTP Configuration</div>
+                  <div style={{ fontSize: 12, color: "#718096", marginTop: 2 }}>
+                    Used to send onboarding and password-reset emails to admins and delegates.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                display: "flex", alignItems: "flex-start", gap: 10,
+                background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10,
+                padding: "10px 14px", marginTop: 16, marginBottom: 18,
+              }}>
+                <Lock size={14} color="#7c3aed" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ fontSize: 12, color: "#6d28d9", lineHeight: 1.5 }}>
+                  Use an app-specific password for Gmail / Outlook. Port 587 = TLS (recommended), 465 = SSL.
+                  The password is stored server-side and redacted from frontend reads on refresh.
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+                {SMTP_FIELDS.map(f => (
+                  <div key={f.key}>
+                    <label className="label">{f.label}</label>
+                    <input
+                      className="input"
+                      type={f.type}
+                      value={settings[f.key] || ""}
+                      onChange={set(f.key)}
+                      placeholder={f.placeholder}
+                      autoComplete={f.type === "password" ? "new-password" : "off"}
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label className="label">Encryption</label>
+                  <select
+                    className="input"
+                    value={settings.smtp_encryption || "tls"}
+                    onChange={set("smtp_encryption")}
+                  >
+                    <option value="tls">TLS (port 587)</option>
+                    <option value="ssl">SSL (port 465)</option>
+                    <option value="none">None (not recommended)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Test SMTP */}
+              <div style={{
+                marginTop: 20, padding: 16, borderRadius: 12,
+                background: "#f8fafc", border: "1px solid #e2e8f0",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a202c", marginBottom: 10 }}>
+                  Send a test email
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    className="input"
+                    type="email"
+                    value={testTo}
+                    onChange={(e) => setTestTo(e.target.value)}
+                    placeholder="recipient@example.com"
+                    style={{ flex: 1, minWidth: 220 }}
+                  />
+                  <button
+                    onClick={sendTest}
+                    disabled={testing}
+                    className="btn-primary"
+                    style={{ gap: 6 }}
+                  >
+                    <Send size={14} /> {testing ? "Sending..." : "Save & Send Test"}
+                  </button>
+                </div>
+                {testResult && (
+                  <div style={{
+                    marginTop: 12,
+                    display: "flex", alignItems: "center", gap: 8,
+                    fontSize: 13, fontWeight: 500,
+                    color: testResult.kind === "success" ? "#276749" : "#c53030",
+                  }}>
+                    {testResult.kind === "success"
+                      ? <CheckCircle2 size={15} />
+                      : <AlertCircle size={15} />}
+                    {testResult.message}
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Preview card */}
             <div className="card" style={{ padding: 24, background: "linear-gradient(135deg, #091f42, #0F2D5E)", color: "white" }}>

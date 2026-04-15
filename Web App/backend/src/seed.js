@@ -17,16 +17,14 @@ async function seed() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  const passwordHash = await bcrypt.hash("abcd1234", 10);
+  const passwordHash = await bcrypt.hash("admin123", 10);
+  // Keep exactly one admin — wipe any others that prior seeds created
+  await pool.query("DELETE FROM users WHERE email != ?", ["admin@fica.com"]);
   await pool.query(
     "INSERT INTO users (email, password_hash) VALUES (?, ?) ON DUPLICATE KEY UPDATE password_hash = ?",
-    ["admin@fica.org.fj", passwordHash, passwordHash]
+    ["admin@fica.com", passwordHash, passwordHash]
   );
-  await pool.query(
-    "INSERT INTO users (email, password_hash) VALUES (?, ?) ON DUPLICATE KEY UPDATE password_hash = ?",
-    ["kritish.vodafone@gmail.com", passwordHash, passwordHash]
-  );
-  console.log("✓ Admin users seeded");
+  console.log("✓ Admin user seeded (admin@fica.com / admin123)");
 
   // ─── Clear existing event data ───────────────────────────────────────────
   await pool.query("UPDATE sessions SET speaker_id = NULL WHERE speaker_id IS NOT NULL");
@@ -316,7 +314,7 @@ async function seed() {
 
   await pool.end();
   console.log("\n✅ FICA Congress seed complete (2025 historical + 2026 current)!");
-  console.log("   Admin: admin@fica.org.fj / abcd1234");
+  console.log("   Admin: admin@fica.com / admin123");
   console.log("   Delegate: kritish@fica.com / pass123");
   console.log("   Other delegates: delegate123");
   console.log("   6 projects ready for voting (voting is open)");

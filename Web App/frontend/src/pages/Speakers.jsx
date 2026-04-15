@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Star, Mic2 } from "lucide-react";
+import {
+  Plus, Pencil, Trash2, Search, Star, Mic2, Mail,
+  Link2, AtSign, Building2,
+} from "lucide-react";
 import Layout from "../components/Layout";
-import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import { api } from "../services/api";
+import {
+  Toast, useToast, StatCard, IconBtn, Chip, FilterBar,
+  LoadingState, EmptyState, SegmentedTabs, ActionModal, ConfirmModal,
+  Field, GhostBtn, GoldBtn,
+} from "../components/ui";
 
 const EMPTY = {
   name: "", title: "", organization: "", bio: "",
@@ -11,248 +18,437 @@ const EMPTY = {
   is_keynote: false, display_order: 0
 };
 
-function SpeakerForm({ form, setForm, onSave, onCancel, saving, err }) {
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
-  return (
-    <div>
-      {err && <div style={{ background: "#fff5f5", border: "1px solid #fed7d7", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#c53030" }}>{err}</div>}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        <div style={{ gridColumn: "1/-1" }}>
-          <label className="label">Full Name *</label>
-          <input className="input" value={form.name} onChange={set("name")} placeholder="e.g. Dr. Sarah Chen" required />
-        </div>
-        <div>
-          <label className="label">Title / Role</label>
-          <input className="input" value={form.title} onChange={set("title")} placeholder="e.g. Managing Partner" />
-        </div>
-        <div>
-          <label className="label">Organisation</label>
-          <input className="input" value={form.organization} onChange={set("organization")} placeholder="e.g. Deloitte Fiji" />
-        </div>
-        <div style={{ gridColumn: "1/-1" }}>
-          <label className="label">Bio</label>
-          <textarea className="input" value={form.bio} onChange={set("bio")} placeholder="Speaker biography..." rows={4} />
-        </div>
-        <div style={{ gridColumn: "1/-1" }}>
-          <label className="label">Photo URL</label>
-          <input className="input" value={form.photo_url} onChange={set("photo_url")} placeholder="https://..." />
-        </div>
-        <div>
-          <label className="label">Email</label>
-          <input className="input" type="email" value={form.email} onChange={set("email")} placeholder="speaker@example.com" />
-        </div>
-        <div>
-          <label className="label">LinkedIn URL</label>
-          <input className="input" value={form.linkedin} onChange={set("linkedin")} placeholder="https://linkedin.com/in/..." />
-        </div>
-        <div>
-          <label className="label">Twitter / X handle</label>
-          <input className="input" value={form.twitter} onChange={set("twitter")} placeholder="@handle" />
-        </div>
-        <div>
-          <label className="label">Display Order</label>
-          <input className="input" type="number" value={form.display_order} onChange={set("display_order")} min={0} />
-        </div>
-        <div style={{ gridColumn: "1/-1" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={!!form.is_keynote}
-              onChange={set("is_keynote")}
-              style={{ width: 16, height: 16, accentColor: "#C8A951" }}
-            />
-            <span style={{ fontSize: 14, fontWeight: 500, color: "#4a5568" }}>
-              Keynote Speaker
-            </span>
-          </label>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
-        <button onClick={onCancel} className="btn-ghost">Cancel</button>
-        <button onClick={onSave} className="btn-gold" disabled={saving}>
-          {saving ? "Saving..." : "Save Speaker"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function Speakers() {
   const [speakers, setSpeakers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [modal, setModal] = useState(null); // null | "add" | "edit"
-  const [form, setForm] = useState(EMPTY);
-  const [editId, setEditId] = useState(null);
+  const [filterKind, setFilterKind] = useState("all"); // all | keynote | regular
+  const [modal, setModal] = useState(null); // null | { form, editId }
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const { message, show } = useToast();
 
   async function load() {
     try {
       const data = await api("/event/speakers");
       setSpeakers(data.speakers || []);
+    } catch (e) {
+      show("error", e.message);
     } finally {
       setLoading(false);
     }
   }
-
   useEffect(() => { load(); }, []);
 
-  function openAdd() { setForm(EMPTY); setEditId(null); setErr(""); setModal("add"); }
-  function openEdit(s) { setForm({ ...s, is_keynote: !!s.is_keynote }); setEditId(s.id); setErr(""); setModal("edit"); }
-  function closeModal() { setModal(null); setErr(""); }
+  function openAdd() { setModal({ form: { ...EMPTY }, editId: null }); }
+  function openEdit(s) {
+    setModal({
+      form: { ...EMPTY, ...s, is_keynote: !!s.is_keynote },
+      editId: s.id,
+    });
+  }
+  function closeModal() { if (!saving) setModal(null); }
+  function setField(k, v) {
+    setModal(m => ({ ...m, form: { ...m.form, [k]: v } }));
+  }
 
   async function save() {
-    setErr(""); setSaving(true);
+    if (!modal.form.name.trim()) return show("error", "Name is required");
+    setSaving(true);
     try {
-      if (modal === "add") {
-        await api("/event/speakers", { method: "POST", body: form });
+      if (modal.editId) {
+        await api(`/event/speakers/${modal.editId}`, { method: "PUT", body: modal.form });
+        show("success", `${modal.form.name} updated`);
       } else {
-        await api(`/event/speakers/${editId}`, { method: "PUT", body: form });
+        await api("/event/speakers", { method: "POST", body: modal.form });
+        show("success", `${modal.form.name} added`);
       }
-      closeModal();
+      setModal(null);
       await load();
     } catch (e) {
-      setErr(e.message);
+      show("error", e.message);
     } finally {
       setSaving(false);
     }
   }
 
-  async function deleteSpeaker(id) {
+  async function confirmDelete() {
+    if (!deleteConfirm) return;
+    setDeleting(true);
     try {
-      await api(`/event/speakers/${id}`, { method: "DELETE" });
+      await api(`/event/speakers/${deleteConfirm.id}`, { method: "DELETE" });
+      show("success", `${deleteConfirm.name} deleted`);
       setDeleteConfirm(null);
       await load();
     } catch (e) {
-      alert(e.message);
+      show("error", e.message);
+    } finally {
+      setDeleting(false);
     }
   }
 
-  const filtered = speakers.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    (s.organization || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = speakers.filter(s => {
+    if (filterKind === "keynote" && !s.is_keynote) return false;
+    if (filterKind === "regular" && s.is_keynote) return false;
+    const q = search.toLowerCase();
+    return (
+      (s.name || "").toLowerCase().includes(q) ||
+      (s.organization || "").toLowerCase().includes(q) ||
+      (s.title || "").toLowerCase().includes(q)
+    );
+  });
+
+  const keynoteCount = speakers.filter(s => s.is_keynote).length;
 
   return (
     <Layout>
-      <div style={{ padding: 28 }} className="animate-in">
+      <div style={{ padding: "8px 0 28px" }} className="animate-in">
         <PageHeader
           title="Speakers"
-          subtitle={`${speakers.length} speaker${speakers.length !== 1 ? "s" : ""} registered for FICA Congress 2026`}
+          subtitle="Manage keynote and regular speakers for FICA Congress 2026"
           action={
-            <button className="btn-gold" onClick={openAdd}>
-              <Plus size={16} /> Add Speaker
-            </button>
+            <GoldBtn onClick={openAdd}>
+              <Plus size={15} /> Add Speaker
+            </GoldBtn>
           }
         />
 
-        {/* Search */}
-        <div style={{ position: "relative", marginBottom: 20, maxWidth: 300 }}>
-          <Search size={15} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#a0aec0" }} />
-          <input
-            className="search-input"
-            style={{ width: "100%", paddingLeft: 34 }}
-            placeholder="Search speakers..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+        <Toast message={message} />
+
+        {/* Stats */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+          gap: 12, marginBottom: 16,
+        }}>
+          <StatCard label="Total Speakers" value={speakers.length} icon={Mic2} color="#0F2D5E" />
+          <StatCard label="Keynote Speakers" value={keynoteCount} icon={Star} color="#C8A951" />
+          <StatCard label="With Bio" value={speakers.filter(s => s.bio).length} icon={Building2} color="#276749" />
         </div>
 
+        {/* Filter bar */}
+        <FilterBar>
+          <div style={{ position: "relative", flex: "1 1 240px", minWidth: 220 }}>
+            <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+            <input
+              className="input"
+              style={{ paddingLeft: 36 }}
+              placeholder="Search by name, title, or organisation…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <SegmentedTabs
+            value={filterKind}
+            onChange={setFilterKind}
+            options={[
+              { value: "all", label: "All", count: speakers.length },
+              { value: "keynote", label: "Keynote", icon: Star, count: keynoteCount },
+              { value: "regular", label: "Regular", count: speakers.length - keynoteCount },
+            ]}
+          />
+        </FilterBar>
+
+        {/* Grid */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#a0aec0" }}>Loading speakers...</div>
+          <LoadingState label="Loading speakers…" />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            Icon={Mic2}
+            title="No speakers match"
+            subtitle="Try clearing the search or adjusting the filter."
+          />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+            gap: 14,
+          }}>
             {filtered.map(s => (
-              <div key={s.id} className="card" style={{ padding: 20, display: "flex", gap: 14 }}>
-                {/* Avatar */}
-                <div style={{ flexShrink: 0 }}>
-                  <img
-                    src={s.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=0F2D5E&color=C8A951&size=80`}
-                    alt={s.name}
-                    style={{ width: 72, height: 72, borderRadius: 12, objectFit: "cover", display: "block" }}
-                    onError={e => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=0F2D5E&color=C8A951&size=80`; }}
-                  />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#1a202c" }}>{s.name}</div>
-                      {s.is_keynote && (
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: 3,
-                          fontSize: 10, color: "#92620c", background: "#fef9e7",
-                          border: "1px solid #f6d860", padding: "1px 7px", borderRadius: 20, fontWeight: 700, marginTop: 2
-                        }}>
-                          <Star size={9} fill="#92620c" /> Keynote
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                      <button onClick={() => openEdit(s)} className="btn-ghost" style={{ padding: "4px 8px", fontSize: 12 }}>
-                        <Pencil size={13} />
-                      </button>
-                      <button onClick={() => setDeleteConfirm(s)} className="btn-danger" style={{ padding: "4px 8px" }}>
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 13, color: "#718096", marginTop: 4 }}>{s.title}</div>
-                  <div style={{ fontSize: 12, color: "#0F2D5E", fontWeight: 600, marginTop: 2 }}>{s.organization}</div>
-                  {s.bio && (
-                    <div style={{ fontSize: 12, color: "#a0aec0", marginTop: 6, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {s.bio}
-                    </div>
-                  )}
-                  {/* Social links */}
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    {s.email && <a href={`mailto:${s.email}`} style={{ fontSize: 11, color: "#4299e1", textDecoration: "none" }}>Email</a>}
-                    {s.linkedin && <a href={s.linkedin} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#0077b5", textDecoration: "none" }}>LinkedIn</a>}
-                    {s.twitter && <span style={{ fontSize: 11, color: "#1da1f2" }}>{s.twitter}</span>}
-                  </div>
-                </div>
-              </div>
+              <SpeakerCard
+                key={s.id}
+                speaker={s}
+                onEdit={() => openEdit(s)}
+                onDelete={() => setDeleteConfirm(s)}
+              />
             ))}
-            {filtered.length === 0 && (
-              <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 48, color: "#a0aec0" }}>
-                <Mic2 size={40} color="#e2e8f0" style={{ marginBottom: 12 }} />
-                <div style={{ fontSize: 15, fontWeight: 600 }}>No speakers found</div>
-                <div style={{ fontSize: 13, marginTop: 4 }}>Add your first speaker to get started</div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* Add / Edit Modal */}
-        {(modal === "add" || modal === "edit") && (
-          <Modal
-            title={modal === "add" ? "Add Speaker" : "Edit Speaker"}
-            onClose={closeModal}
-            size="lg"
-          >
-            <SpeakerForm form={form} setForm={setForm} onSave={save} onCancel={closeModal} saving={saving} err={err} />
-          </Modal>
-        )}
-
-        {/* Delete confirm */}
-        {deleteConfirm && (
-          <div className="modal-overlay">
-            <div className="modal" style={{ maxWidth: 420 }}>
-              <div style={{ padding: "24px" }}>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Delete Speaker?</div>
-                <div style={{ fontSize: 14, color: "#718096" }}>
-                  Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This will also remove them from any assigned sessions.
-                </div>
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-                  <button className="btn-ghost" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-                  <button className="btn-danger" style={{ background: "#e53e3e", color: "white", border: "none" }} onClick={() => deleteSpeaker(deleteConfirm.id)}>Delete</button>
-                </div>
-              </div>
-            </div>
+        {filtered.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8", textAlign: "right" }}>
+            Showing {filtered.length} of {speakers.length} speakers
           </div>
         )}
       </div>
+
+      {/* Add / Edit modal */}
+      {modal && (
+        <ActionModal
+          title={modal.editId ? "Edit Speaker" : "Add Speaker"}
+          subtitle={modal.editId ? "Update speaker profile" : "Register a speaker for the congress"}
+          size="lg"
+          saving={saving}
+          onClose={closeModal}
+          footer={
+            <>
+              <GhostBtn onClick={closeModal} disabled={saving}>Cancel</GhostBtn>
+              <GoldBtn onClick={save} disabled={saving}>
+                {saving ? "Saving…" : modal.editId ? "Update Speaker" : "Add Speaker"}
+              </GoldBtn>
+            </>
+          }
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Full name" required full>
+              <input
+                className="input"
+                value={modal.form.name}
+                onChange={e => setField("name", e.target.value)}
+                placeholder="e.g. Dr. Sarah Chen"
+              />
+            </Field>
+            <Field label="Title / Role">
+              <input
+                className="input"
+                value={modal.form.title}
+                onChange={e => setField("title", e.target.value)}
+                placeholder="Managing Partner"
+              />
+            </Field>
+            <Field label="Organisation">
+              <input
+                className="input"
+                value={modal.form.organization}
+                onChange={e => setField("organization", e.target.value)}
+                placeholder="Deloitte Fiji"
+              />
+            </Field>
+            <Field label="Bio" full>
+              <textarea
+                className="input"
+                value={modal.form.bio}
+                onChange={e => setField("bio", e.target.value)}
+                placeholder="Short professional biography…"
+                rows={3}
+              />
+            </Field>
+            <Field label="Photo URL" full>
+              <input
+                className="input"
+                value={modal.form.photo_url}
+                onChange={e => setField("photo_url", e.target.value)}
+                placeholder="https://…"
+              />
+            </Field>
+            <Field label="Email">
+              <input
+                type="email"
+                className="input"
+                value={modal.form.email}
+                onChange={e => setField("email", e.target.value)}
+                placeholder="speaker@example.com"
+              />
+            </Field>
+            <Field label="LinkedIn">
+              <input
+                className="input"
+                value={modal.form.linkedin}
+                onChange={e => setField("linkedin", e.target.value)}
+                placeholder="https://linkedin.com/in/…"
+              />
+            </Field>
+            <Field label="Twitter handle">
+              <input
+                className="input"
+                value={modal.form.twitter}
+                onChange={e => setField("twitter", e.target.value)}
+                placeholder="@handle"
+              />
+            </Field>
+            <Field label="Display order">
+              <input
+                type="number"
+                className="input"
+                value={modal.form.display_order}
+                onChange={e => setField("display_order", Number(e.target.value) || 0)}
+                min={0}
+              />
+            </Field>
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={{
+                display: "flex", alignItems: "center", gap: 12, padding: 12,
+                background: modal.form.is_keynote ? "#fef9e7" : "#f8fafc",
+                border: `1px solid ${modal.form.is_keynote ? "#f6d860" : "#e2e8f0"}`,
+                borderRadius: 10, cursor: "pointer", transition: "all 0.12s",
+              }}>
+                <input
+                  type="checkbox"
+                  checked={!!modal.form.is_keynote}
+                  onChange={e => setField("is_keynote", e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: "#C8A951" }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1a202c", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Star size={13} color="#C8A951" fill={modal.form.is_keynote ? "#C8A951" : "transparent"} />
+                    Keynote Speaker
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    Highlight this speaker as a keynote across the mobile app and schedule.
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </ActionModal>
+      )}
+
+      {/* Delete confirm */}
+      <ConfirmModal
+        open={!!deleteConfirm}
+        tone="danger"
+        title="Delete speaker"
+        message={
+          deleteConfirm
+            ? `Permanently delete ${deleteConfirm.name}? They'll also be unlinked from any sessions they were assigned to.`
+            : ""
+        }
+        confirmLabel="Delete Speaker"
+        loading={deleting}
+        onCancel={() => !deleting && setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+      />
     </Layout>
+  );
+}
+
+/* ───────────────── Speaker Card ───────────────── */
+function SpeakerCard({ speaker, onEdit, onDelete }) {
+  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(speaker.name)}&background=0F2D5E&color=C8A951&size=120`;
+  return (
+    <div
+      className="card"
+      style={{
+        padding: 0, overflow: "hidden",
+        display: "flex", flexDirection: "column",
+        transition: "all 0.12s",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = "0 6px 18px -6px rgba(15,45,94,0.15)";
+        e.currentTarget.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = "";
+        e.currentTarget.style.transform = "";
+      }}
+    >
+      {/* Top band with keynote marker */}
+      <div style={{
+        height: 4,
+        background: speaker.is_keynote
+          ? "linear-gradient(90deg, #C8A951, #e2c87a)"
+          : "#eef2ff",
+      }} />
+
+
+      <div style={{ padding: 16, display: "flex", gap: 14 }}>
+        <img
+          src={speaker.photo_url || fallback}
+          alt={speaker.name}
+          style={{
+            width: 64, height: 64, borderRadius: 14,
+            objectFit: "cover", flexShrink: 0,
+            border: "1px solid #e2e8f0",
+          }}
+          onError={(e) => { e.target.src = fallback; }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{
+                fontSize: 14.5, fontWeight: 700, color: "#0f172a",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{speaker.name}</div>
+              {speaker.title && (
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{speaker.title}</div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+              <IconBtn Icon={Pencil} color="#7c3aed" bg="#f5f3ff" title="Edit" onClick={onEdit} />
+              <IconBtn Icon={Trash2} color="#dc2626" bg="#fff5f5" title="Delete" onClick={onDelete} />
+            </div>
+          </div>
+
+          {speaker.organization && (
+            <div style={{
+              fontSize: 11.5, color: "#0F2D5E", fontWeight: 600, marginTop: 6,
+              display: "flex", alignItems: "center", gap: 4,
+            }}>
+              <Building2 size={11} />
+              {speaker.organization}
+            </div>
+          )}
+
+          {/* Chips row */}
+          {Boolean(speaker.is_keynote) && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+              <Chip
+                label="Keynote"
+                color="#92620c"
+                bg="#fef9e7"
+                border="#f6d860"
+                small
+                icon={Star}
+              />
+            </div>
+          )}
+
+          {speaker.bio && (
+            <div style={{
+              fontSize: 12, color: "#94a3b8", marginTop: 8, lineHeight: 1.5,
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+            }}>
+              {speaker.bio}
+            </div>
+          )}
+
+          {/* Social row */}
+          {(speaker.email || speaker.linkedin || speaker.twitter) && (
+            <div style={{
+              display: "flex", gap: 8, marginTop: 10,
+              paddingTop: 10, borderTop: "1px solid #f1f5f9",
+            }}>
+              {speaker.email && (
+                <a
+                  href={`mailto:${speaker.email}`}
+                  style={{ color: "#64748b", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, textDecoration: "none" }}
+                  title={speaker.email}
+                >
+                  <Mail size={12} /> Email
+                </a>
+              )}
+              {speaker.linkedin && (
+                <a
+                  href={speaker.linkedin} target="_blank" rel="noreferrer"
+                  style={{ color: "#0077b5", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, textDecoration: "none" }}
+                >
+                  <Link2 size={12} /> LinkedIn
+                </a>
+              )}
+              {speaker.twitter && (
+                <a
+                  href={speaker.twitter.startsWith("http") ? speaker.twitter : `https://twitter.com/${String(speaker.twitter).replace(/^@/, "")}`}
+                  target="_blank" rel="noreferrer"
+                  style={{ color: "#1da1f2", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, textDecoration: "none" }}
+                >
+                  <AtSign size={12} /> {speaker.twitter}
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

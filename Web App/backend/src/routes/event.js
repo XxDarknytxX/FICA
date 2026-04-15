@@ -57,6 +57,13 @@ export function makeEventRouter(controller) {
   r.post("/users/:id/password", controller.setUserPassword);
   r.post("/users/:id/toggle", controller.toggleUserActive);
   r.put("/users/:id/profile", controller.updateUserProfile);
+  r.post("/users/:id/send-onboarding", controller.sendUserOnboarding);
+  r.post("/users/:id/send-reset", controller.sendUserResetPassword);
+  r.put("/users/:id", controller.updateUser);
+  r.delete("/users/:id", controller.deleteUser);
+
+  // ─── SMTP test ──────────────────────────────────────────────────────────
+  r.post("/settings/test-smtp", controller.sendTestSmtp);
 
   // ─── Attendee Directory (networking) ────────────────────────────────────
   r.get("/directory", controller.getDirectory);

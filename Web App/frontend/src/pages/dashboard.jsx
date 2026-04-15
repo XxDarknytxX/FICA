@@ -1,32 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mic2, Calendar, Award, Users, Bell, Coffee, UserCheck, TrendingUp, ChevronRight, Trophy } from "lucide-react";
+import { Mic2, Calendar, Award, Users, Bell, Coffee, UserCheck, ChevronRight, Trophy } from "lucide-react";
 import Layout from "../components/Layout";
 import { api } from "../services/api";
+import { StatCard, LoadingState } from "../components/ui";
 
 const SESSION_TYPE_COLORS = {
   keynote: "#92620c", panel: "#234e52", workshop: "#2c5282",
   break: "#718096", lunch: "#276749", ceremony: "#0F2D5E",
   registration: "#c53030", awards: "#92620c", networking: "#6b21a8",
 };
-
-function StatCard({ icon: Icon, label, value, sub, color = "#0F2D5E" }) {
-  return (
-    <div className="stat-card" style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-      <div style={{
-        width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-        background: `${color}18`, display: "flex", alignItems: "center", justifyContent: "center"
-      }}>
-        <Icon size={22} color={color} />
-      </div>
-      <div>
-        <div style={{ fontSize: 28, fontWeight: 800, color: "#1a202c", lineHeight: 1 }}>{value ?? "–"}</div>
-        <div style={{ fontSize: 13, color: "#718096", marginTop: 4 }}>{label}</div>
-        {sub && <div style={{ fontSize: 11, color: "#a0aec0", marginTop: 2 }}>{sub}</div>}
-      </div>
-    </div>
-  );
-}
 
 function SessionRow({ session }) {
   const color = SESSION_TYPE_COLORS[session.type] || "#718096";
@@ -115,9 +98,9 @@ export default function Dashboard() {
 
         {/* Stats */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#a0aec0", fontSize: 14 }}>Loading dashboard...</div>
+          <LoadingState label="Loading dashboard…" />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 14, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12, marginBottom: 24 }}>
             <StatCard icon={Mic2} label="Speakers" value={stats?.speakers} color="#0F2D5E" />
             <StatCard icon={Calendar} label="Sessions" value={stats?.sessions} sub="Across 2 days" color="#2c5282" />
             <StatCard icon={Award} label="Sponsors" value={stats?.sponsors} sub="Platinum to Media" color="#92620c" />
@@ -125,7 +108,7 @@ export default function Dashboard() {
             <StatCard icon={UserCheck} label="Checked In" value={stats?.checkedIn} sub={`of ${stats?.attendees ?? 0}`} color="#553c9a" />
             <StatCard icon={Coffee} label="Networking" value={stats?.networking} sub="Events" color="#6b21a8" />
             <StatCard icon={Bell} label="Published" value={stats?.announcements} sub="Announcements" color="#c53030" />
-            <StatCard icon={Trophy} label="Projects" value={stats?.projects} sub={`${stats?.totalVotes ?? 0} votes cast`} color="#6b21a8" />
+            <StatCard icon={Trophy} label="Projects" value={stats?.projects} sub={`${stats?.totalVotes ?? 0} votes cast`} color="#7c3aed" />
           </div>
         )}
 

@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -69,7 +72,9 @@ import com.fica.events.data.models.Session
 import com.fica.events.data.models.Speaker
 import com.fica.events.data.models.Sponsor
 import com.fica.events.data.models.toBool
+import com.fica.events.data.models.CongressYear
 import com.fica.events.ui.components.AvatarView
+import com.fica.events.ui.components.DashboardSkeleton
 import com.fica.events.ui.components.FICALogoView
 import com.fica.events.ui.components.LoadingView
 import com.fica.events.ui.components.SectionHeader
@@ -132,7 +137,11 @@ fun String?.relativeTime(): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onLogout: (() -> Unit)? = null) {
+fun HomeScreen(
+    onLogout: (() -> Unit)? = null,
+    onSeeAllSpeakers: (() -> Unit)? = null,
+    onSeeAllSponsors: (() -> Unit)? = null,
+) {
     var sessions by remember { mutableStateOf<List<Session>>(emptyList()) }
     var speakers by remember { mutableStateOf<List<Speaker>>(emptyList()) }
     var announcements by remember { mutableStateOf<List<Announcement>>(emptyList()) }
@@ -148,7 +157,7 @@ fun HomeScreen(onLogout: (() -> Unit)? = null) {
         isLoading = true
         try {
             coroutineScope {
-                val currentYear = 2026
+                val currentYear = CongressYear.Y2026.year
                 val sessionsDeferred = async { ApiClient.service.getSessions(year = currentYear) }
                 val speakersDeferred = async { ApiClient.service.getSpeakers(year = currentYear) }
                 val announcementsDeferred = async { ApiClient.service.getAnnouncements() }
@@ -165,12 +174,14 @@ fun HomeScreen(onLogout: (() -> Unit)? = null) {
         isLoading = false
     }
 
-    // Profile bottom sheet
+    // Profile bottom sheet — leaves iOS-style top gap (sheet doesn't cover status bar area)
     if (showProfile) {
         ModalBottomSheet(
             onDismissRequest = { showProfile = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = FICABg,
+            contentWindowInsets = { WindowInsets(top = 0, bottom = 0, left = 0, right = 0) },
+            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
         ) {
             com.fica.events.ui.profile.ProfileScreen(onLogout = {
                 showProfile = false
@@ -202,13 +213,13 @@ fun HomeScreen(onLogout: (() -> Unit)? = null) {
         )
 
         if (isLoading) {
-            LoadingView(message = "Loading...")
+            DashboardSkeleton()
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -237,7 +248,7 @@ fun HomeScreen(onLogout: (() -> Unit)? = null) {
                 // Keynote Speakers
                 val keynoteSpeakers = speakers.filter { it.is_keynote.toBool() }
                 if (keynoteSpeakers.isNotEmpty()) {
-                    SpeakersSection(speakers = keynoteSpeakers)
+                    SpeakersSection(speakers = keynoteSpeakers, onSeeAll = onSeeAllSpeakers)
                 }
 
                 // Networking Events
@@ -247,10 +258,10 @@ fun HomeScreen(onLogout: (() -> Unit)? = null) {
 
                 // Sponsors
                 if (sponsors.isNotEmpty()) {
-                    SponsorsSection(sponsors = sponsors)
+                    SponsorsSection(sponsors = sponsors, onSeeAll = onSeeAllSponsors)
                 }
 
-                Spacer(modifier = Modifier.height(140.dp))
+                Spacer(modifier = Modifier.height(100.dp))
             }
         }
     }
@@ -267,35 +278,37 @@ private fun HeroCard(
         modifier = Modifier
             .padding(horizontal = 20.dp)
             .fillMaxWidth()
-            .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = FICANavy.copy(alpha = 0.3f))
+            .shadow(10.dp, RoundedCornerShape(20.dp), ambientColor = FICANavy.copy(alpha = 0.25f))
             .clip(RoundedCornerShape(20.dp))
             .background(FICAHeroGradient)
-            .padding(vertical = 28.dp, horizontal = 20.dp),
+            .padding(vertical = 22.dp, horizontal = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         // Welcome text
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = "Welcome, $firstName",
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
+                lineHeight = 28.sp,
             )
             Text(
                 text = "Charting New Horizons for a Changing World",
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.65f),
+                color = Color.White.copy(alpha = 0.70f),
                 textAlign = TextAlign.Center,
+                lineHeight = 16.sp,
                 modifier = Modifier.padding(horizontal = 8.dp),
             )
         }
 
-        // Info pills row
+        // Info pills row — tighter, bigger icons
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -325,22 +338,22 @@ private fun HeroCard(
             Row(
                 modifier = Modifier
                     .background(
-                        Color.White.copy(alpha = 0.12f),
+                        Color.White.copy(alpha = 0.14f),
                         RoundedCornerShape(50),
                     )
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.QrCode,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp),
+                    tint = FICAGold,
+                    modifier = Modifier.size(13.dp),
                 )
                 Text(
                     text = code,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     color = Color.White,
@@ -359,20 +372,21 @@ private fun HeroInfoPill(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = FICAGold,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(20.dp),
         )
         Text(
             text = text,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White.copy(alpha = 0.85f),
+            color = Color.White.copy(alpha = 0.90f),
             textAlign = TextAlign.Center,
+            lineHeight = 14.sp,
         )
     }
 }
@@ -441,29 +455,31 @@ private fun StatItem(
 ) {
     Column(
         modifier = modifier
-            .shadow(4.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
             .background(FICACard, RoundedCornerShape(14.dp))
-            .padding(vertical = 16.dp),
+            .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = color,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(26.dp),
         )
         Text(
             text = value,
-            fontSize = 22.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Black,
             color = FICAText,
+            lineHeight = 30.sp,
         )
         Text(
             text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
             color = FICAMuted,
+            lineHeight = 14.sp,
         )
     }
 }
@@ -489,72 +505,63 @@ private fun SessionsSection(sessions: List<Session>) {
 private fun SessionCard(session: Session) {
     val typeColor = SessionTypeColors.colorFor(session.sessionType)
 
+    // Match iOS style: tight, filled card — no colored accent strip, compact layout.
     Column(
         modifier = Modifier
-            .width(200.dp)
-            .height(140.dp)
-            .shadow(3.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.05f))
-            .clip(RoundedCornerShape(16.dp))
-            .background(FICACard),
+            .width(220.dp)
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .clip(RoundedCornerShape(14.dp))
+            .background(FICACard)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Colored top accent
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-                .background(typeColor),
+        // Row 1: type chip (icon + label, like iOS)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CalendarMonth,
+                contentDescription = null,
+                tint = typeColor,
+                modifier = Modifier.size(12.dp),
+            )
+            Text(
+                text = (session.sessionType ?: "session").replaceFirstChar { it.uppercase() },
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = typeColor,
+            )
+        }
+
+        // Row 2: title
+        Text(
+            text = session.title,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = FICAText,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 19.sp,
         )
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+        // Row 3: time
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Top section: badge + title
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Type badge pill
-                Text(
-                    text = session.sessionType?.replaceFirstChar { it.uppercase() } ?: "Session",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = typeColor,
-                    modifier = Modifier
-                        .background(typeColor.copy(alpha = 0.1f), RoundedCornerShape(50))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                )
-
-                // Title — fixed 2 lines
-                Text(
-                    text = session.title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = FICAText,
-                    maxLines = 2,
-                    minLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 18.sp,
-                )
-            }
-
-            // Bottom: time pinned to bottom
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Schedule,
-                    contentDescription = null,
-                    tint = FICAMuted,
-                    modifier = Modifier.size(13.dp),
-                )
-                Text(
-                    text = session.start_time ?: "",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = FICAMuted,
-                )
-            }
+            Icon(
+                imageVector = Icons.Filled.Schedule,
+                contentDescription = null,
+                tint = FICAMuted,
+                modifier = Modifier.size(11.dp),
+            )
+            Text(
+                text = session.start_time ?: "",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = FICAMuted,
+            )
         }
     }
 }
@@ -584,37 +591,38 @@ private fun AnnouncementRow(announcement: Announcement) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.03f))
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.03f))
             .background(FICACard, RoundedCornerShape(14.dp))
-            .padding(14.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Icon
+        // Icon — bigger rounded-square container (matches iOS)
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .background(iconColor.copy(alpha = 0.1f), RoundedCornerShape(11.dp)),
+                .size(46.dp)
+                .background(iconColor.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = if (isUrgent) Icons.Filled.Warning else Icons.Filled.Notifications,
                 contentDescription = null,
                 tint = iconColor,
-                modifier = Modifier.size(17.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
 
         // Content
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = announcement.title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = FICAText,
+                lineHeight = 18.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -623,6 +631,7 @@ private fun AnnouncementRow(announcement: Announcement) {
                     text = body,
                     fontSize = 13.sp,
                     color = FICASecondary,
+                    lineHeight = 16.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -642,9 +651,13 @@ private fun AnnouncementRow(announcement: Announcement) {
 // ── Speakers Section ───────────────────────────────────────────────────────
 
 @Composable
-private fun SpeakersSection(speakers: List<Speaker>) {
+private fun SpeakersSection(speakers: List<Speaker>, onSeeAll: (() -> Unit)?) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader(title = "Keynote Speakers")
+        SectionHeader(
+            title = "Keynote Speakers",
+            actionLabel = if (onSeeAll != null) "See All" else null,
+            onAction = onSeeAll,
+        )
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.padding(start = 20.dp),
@@ -660,8 +673,8 @@ private fun SpeakersSection(speakers: List<Speaker>) {
 private fun SpeakerCard(speaker: Speaker) {
     Column(
         modifier = Modifier
-            .width(110.dp)
-            .shadow(4.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .width(120.dp)
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
             .background(FICACard, RoundedCornerShape(14.dp))
             .padding(vertical = 16.dp, horizontal = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -670,19 +683,21 @@ private fun SpeakerCard(speaker: Speaker) {
         AvatarView(
             name = speaker.name,
             photoUrl = speaker.photo_url,
-            size = 64.dp,
+            size = 72.dp,
             borderColor = FICAGold,
             borderWidth = 2.dp,
         )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
                 text = speaker.name,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = FICAText,
+                lineHeight = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
@@ -690,8 +705,9 @@ private fun SpeakerCard(speaker: Speaker) {
             )
             Text(
                 text = speaker.organization ?: "",
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 color = FICAMuted,
+                lineHeight = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
@@ -722,7 +738,7 @@ private fun EventsSection(events: List<NetworkingEvent>) {
 private fun EventCard(event: NetworkingEvent) {
     Row(
         modifier = Modifier
-            .shadow(4.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.03f))
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.03f))
             .background(FICACard, RoundedCornerShape(14.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -795,9 +811,13 @@ private fun EventCard(event: NetworkingEvent) {
 // ── Sponsors Section ───────────────────────────────────────────────────────
 
 @Composable
-private fun SponsorsSection(sponsors: List<Sponsor>) {
+private fun SponsorsSection(sponsors: List<Sponsor>, onSeeAll: (() -> Unit)?) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader(title = "Sponsors")
+        SectionHeader(
+            title = "Sponsors",
+            actionLabel = if (onSeeAll != null) "See All" else null,
+            onAction = onSeeAll,
+        )
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.padding(start = 20.dp),
@@ -813,43 +833,52 @@ private fun SponsorsSection(sponsors: List<Sponsor>) {
 private fun SponsorCard(sponsor: Sponsor) {
     Column(
         modifier = Modifier
-            .width(85.dp)
-            .shadow(2.dp, RoundedCornerShape(12.dp), ambientColor = Color.Black.copy(alpha = 0.03f))
-            .background(FICACard, RoundedCornerShape(12.dp))
-            .padding(10.dp),
+            .width(110.dp)
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .background(FICACard, RoundedCornerShape(14.dp))
+            .padding(vertical = 14.dp, horizontal = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 2-letter abbreviation
+        // Logo placeholder — bigger rounded square with abbreviation (iOS style)
         Box(
             modifier = Modifier
-                .size(width = 60.dp, height = 42.dp)
-                .background(FICAInputBg, RoundedCornerShape(10.dp)),
+                .size(width = 72.dp, height = 56.dp)
+                .background(FICAInputBg, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = sponsor.name.take(2).uppercase(),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
                 color = FICANavy,
+                lineHeight = 24.sp,
             )
         }
-        Text(
-            text = sponsor.name,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = FICAText,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = sponsor.tier?.replaceFirstChar { it.uppercase() } ?: "",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = FICAGold,
-            textAlign = TextAlign.Center,
-        )
+        ) {
+            Text(
+                text = sponsor.name,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = FICAText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                lineHeight = 15.sp,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = sponsor.tier?.replaceFirstChar { it.uppercase() } ?: "",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = FICAGold,
+                textAlign = TextAlign.Center,
+                lineHeight = 13.sp,
+            )
+        }
     }
 }

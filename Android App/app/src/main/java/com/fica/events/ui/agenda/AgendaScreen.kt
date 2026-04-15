@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,6 +67,7 @@ import com.fica.events.ui.theme.FICABg
 import com.fica.events.ui.theme.FICABorder
 import com.fica.events.ui.theme.FICACard
 import com.fica.events.ui.theme.FICAGold
+import com.fica.events.ui.theme.FICAInputBg
 import com.fica.events.ui.theme.FICAMuted
 import com.fica.events.ui.theme.FICANavy
 import com.fica.events.ui.theme.FICASecondary
@@ -147,57 +149,113 @@ fun AgendaScreen() {
             .fillMaxSize()
             .background(FICABg),
     ) {
-        CenterAlignedTopAppBar(
-            title = { Text("Agenda", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = FICAText) },
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = FICABg),
-        )
+        // Custom compact title bar (tighter than Material3 TopAppBar's 64dp default,
+        // but still respects status bar inset + iOS-like breathing room)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 20.dp, bottom = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "Agenda",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = FICAText,
+            )
+        }
 
-        // Congress year picker
-        SingleChoiceSegmentedButtonRow(
+        // ── Congress year picker (iOS-style segmented pill) ───────────────
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 4.dp),
+                .clip(RoundedCornerShape(50))
+                .background(FICAInputBg)
+                .padding(3.dp),
         ) {
-            CongressYear.entries.forEachIndexed { index, year ->
-                SegmentedButton(
-                    selected = selectedCongress == year,
-                    onClick = {
-                        selectedCongress = year
-                        selectedDay = year.dayDates.first().date
-                        selectedType = null
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = CongressYear.entries.size),
-                ) {
-                    Text(year.label, fontSize = 13.sp)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                CongressYear.entries.forEach { year ->
+                    val isSelected = selectedCongress == year
+                    val bgColor by androidx.compose.animation.animateColorAsState(
+                        targetValue = if (isSelected) FICACard else Color.Transparent,
+                        animationSpec = androidx.compose.animation.core.tween(180),
+                        label = "congressBg",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(50))
+                            .background(bgColor)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            ) {
+                                selectedCongress = year
+                                selectedDay = year.dayDates.first().date
+                                selectedType = null
+                            }
+                            .padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = year.label,
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (isSelected) FICAText else FICASecondary,
+                        )
+                    }
                 }
             }
         }
 
-        // Day picker
+        // ── Day picker (compact, larger text) ─────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             selectedCongress.dayDates.forEach { day ->
                 val isSelected = selectedDay == day.date
-                Card(
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { selectedDay = day.date },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (isSelected) FICANavy else FICACard),
-                    elevation = if (isSelected) CardDefaults.cardElevation(6.dp) else CardDefaults.cardElevation(0.dp),
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (isSelected) FICANavy else FICACard)
+                        .then(
+                            if (isSelected) {
+                                Modifier.shadow(
+                                    2.dp,
+                                    RoundedCornerShape(14.dp),
+                                    ambientColor = FICANavy.copy(alpha = 0.15f),
+                                )
+                            } else Modifier
+                        )
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        ) { selectedDay = day.date }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
-                        Text(day.label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else FICASecondary)
-                        Text(day.subtitle, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = if (isSelected) Color.White else FICASecondary)
+                        Text(
+                            day.label,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color.White else FICAText,
+                        )
+                        Text(
+                            day.subtitle,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isSelected) Color.White.copy(alpha = 0.85f) else FICASecondary,
+                        )
                     }
                 }
             }
@@ -208,7 +266,7 @@ fun AgendaScreen() {
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 10.dp),
+                .padding(top = 4.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             types.forEach { type ->
@@ -253,7 +311,7 @@ fun AgendaScreen() {
                                 AgendaSessionCard(session = session)
                             }
                         }
-                        item { Spacer(modifier = Modifier.height(140.dp)) }
+                        item { Spacer(modifier = Modifier.height(100.dp)) }
                     }
                 }
             }
@@ -276,7 +334,7 @@ private data class SessionSection(
 private fun SessionGroupHeader(group: SessionGroup, congress: CongressYear) {
     Column {
         HorizontalDivider(
-            modifier = Modifier.padding(top = 16.dp, bottom = 12.dp),
+            modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
             thickness = 0.5.dp,
             color = FICABorder,
         )
@@ -289,13 +347,14 @@ private fun SessionGroupHeader(group: SessionGroup, congress: CongressYear) {
                     .size(8.dp)
                     .background(group.color, CircleShape),
             )
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 Text(
                     text = group.label.uppercase(),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = FICAMuted,
                     letterSpacing = 0.8.sp,
+                    lineHeight = 13.sp,
                 )
                 group.subtitle(congress)?.let { sub ->
                     Text(
@@ -303,11 +362,12 @@ private fun SessionGroupHeader(group: SessionGroup, congress: CongressYear) {
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = FICASecondary,
+                        lineHeight = 14.sp,
                     )
                 }
             }
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
     }
 }
 
@@ -323,31 +383,46 @@ private fun AgendaSessionCard(session: Session) {
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .shadow(4.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
             .background(FICACard, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp)),
     ) {
-        Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(accentColor))
+        // Full-height left accent bar (3dp — thinner, iOS-like)
+        Box(modifier = Modifier.width(3.dp).fillMaxHeight().background(accentColor))
 
         Column(
-            modifier = Modifier.weight(1f).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Type badge + time
+            // Row 1: "Session" chip + time range (iOS unified label style)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = session.sessionType?.replaceFirstChar { it.uppercase() } ?: "Session",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = accentColor,
-                )
+                Row(
+                    modifier = Modifier
+                        .background(FICAInputBg, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarMonth,
+                        contentDescription = null,
+                        tint = FICAText,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Text(
+                        text = "Session",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = FICAText,
+                    )
+                }
                 if (session.start_time != null && session.end_time != null) {
                     Text(
-                        text = "${session.start_time} - ${session.end_time}",
+                        text = "${session.start_time} – ${session.end_time}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         fontFamily = FontFamily.Monospace,
@@ -356,41 +431,66 @@ private fun AgendaSessionCard(session: Session) {
                 }
             }
 
-            // Title
-            Text(session.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = FICAText)
+            // Title (larger, bolder — matches iOS visual weight)
+            Text(
+                text = session.title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = FICAText,
+                lineHeight = 22.sp,
+            )
 
-            // Location
-            if (!session.location.isNullOrBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Outlined.Place, null, tint = FICAMuted, modifier = Modifier.size(14.dp))
-                    Text(session.location, fontSize = 12.sp, color = FICAMuted)
-                }
-            }
-
-            // Speaker
+            // Speaker row (iOS order: speaker appears BEFORE description)
             if (!session.speaker_name.isNullOrBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AvatarView(name = session.speaker_name, photoUrl = session.speaker_photo, size = 28.dp, borderColor = FICABorder, borderWidth = 1.dp)
-                    Column {
-                        Text(session.speaker_name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FICAText)
-                        session.speaker_title?.let { Text(it, fontSize = 10.sp, color = FICAMuted, maxLines = 1) }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AvatarView(
+                        name = session.speaker_name,
+                        photoUrl = session.speaker_photo,
+                        size = 26.dp,
+                        borderColor = FICABorder,
+                        borderWidth = 1.dp,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        Text(
+                            session.speaker_name,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = FICAText,
+                            lineHeight = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        session.speaker_title?.let {
+                            Text(
+                                it,
+                                fontSize = 11.sp,
+                                color = FICAMuted,
+                                lineHeight = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
 
-            // Description with smart read-more
+            // Description (shown AFTER speaker, like iOS)
             if (!session.description.isNullOrBlank()) {
+                var hasOverflow by remember { mutableStateOf(false) }
                 Column(
                     modifier = Modifier.animateContentSize(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    var hasOverflow by remember { mutableStateOf(false) }
                     Text(
                         text = session.description,
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         color = FICASecondary,
                         maxLines = if (expanded) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
+                        lineHeight = 18.sp,
                         onTextLayout = { result -> hasOverflow = result.hasVisualOverflow },
                     )
                     if (hasOverflow || expanded) {
@@ -402,6 +502,28 @@ private fun AgendaSessionCard(session: Session) {
                             modifier = Modifier.clickable { expanded = !expanded },
                         )
                     }
+                }
+            }
+
+            // Location (only if present, tiny muted row)
+            if (!session.location.isNullOrBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.Place,
+                        null,
+                        tint = FICAMuted,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Text(
+                        session.location,
+                        fontSize = 11.sp,
+                        color = FICAMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }

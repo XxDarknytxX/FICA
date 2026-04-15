@@ -3,7 +3,8 @@ import {
   Plus, Pencil, Trash2, Coffee, MapPin, Users, Clock,
   MessageSquare, Send, Search, ChevronRight,
   Link2, CalendarClock, TrendingUp, CheckCircle2, XCircle,
-  AlertCircle, BarChart3, Activity
+  AlertCircle, BarChart3, Activity,
+  Wine, UtensilsCrossed, Sparkles, Map as MapIcon, Sunrise,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import Modal from "../components/Modal";
@@ -718,7 +719,21 @@ function MeetingsTab() {
 
 // ─── EVENTS TAB ──────────────────────────────────────────────────────────────
 const NET_TYPES = ["cocktail", "lunch", "coffee", "dinner", "gala", "tour", "breakfast"];
-const TYPE_ICONS = { cocktail: "🍸", lunch: "🍽️", coffee: "☕", dinner: "🍷", gala: "✨", tour: "🗺️", breakfast: "🌅" };
+const TYPE_META = {
+  cocktail:  { Icon: Wine,             color: "#9333ea" },
+  lunch:     { Icon: UtensilsCrossed,  color: "#276749" },
+  coffee:    { Icon: Coffee,           color: "#92400e" },
+  dinner:    { Icon: UtensilsCrossed,  color: "#b91c1c" },
+  gala:      { Icon: Sparkles,         color: "#C8A951" },
+  tour:      { Icon: MapIcon,          color: "#0F2D5E" },
+  breakfast: { Icon: Sunrise,          color: "#d97706" },
+};
+
+function SlotTypeIcon({ type, size = 18 }) {
+  const meta = TYPE_META[type] || { Icon: Coffee, color: "#64748b" };
+  const { Icon, color } = meta;
+  return <Icon size={size} color={color} strokeWidth={2} />;
+}
 const EMPTY_SLOT = { title: "", description: "", start_time: "", end_time: "", slot_date: "2026-05-08", location: "", capacity: "", type: "cocktail", dress_code: "" };
 
 function SlotForm({ form, setForm, onSave, onCancel, saving, err }) {
@@ -728,7 +743,7 @@ function SlotForm({ form, setForm, onSave, onCancel, saving, err }) {
       {err && <div style={{ background: "#fff5f5", border: "1px solid #fed7d7", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#c53030" }}>{err}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
         <div style={{ gridColumn: "1/-1" }}><label className="label">Event Title *</label><input className="input" value={form.title} onChange={s("title")} placeholder="e.g. Welcome Cocktail Reception" required /></div>
-        <div><label className="label">Type *</label><select className="input" value={form.type} onChange={s("type")}>{NET_TYPES.map(t => <option key={t} value={t}>{TYPE_ICONS[t]} {t.charAt(0).toUpperCase() + t.slice(1)}</option>)}</select></div>
+        <div><label className="label">Type *</label><select className="input" value={form.type} onChange={s("type")}>{NET_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}</select></div>
         <div><label className="label">Date *</label><select className="input" value={form.slot_date} onChange={s("slot_date")}><option value="2026-05-08">Day 1 – 8 May 2026</option><option value="2026-05-09">Day 2 – 9 May 2026</option></select></div>
         <div><label className="label">Start Time *</label><input className="input" type="time" value={form.start_time} onChange={s("start_time")} required /></div>
         <div><label className="label">End Time *</label><input className="input" type="time" value={form.end_time} onChange={s("end_time")} required /></div>
@@ -798,7 +813,7 @@ function EventsTab() {
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                        <span style={{ fontSize: 20 }}>{TYPE_ICONS[s.type]}</span>
+                        <SlotTypeIcon type={s.type} size={20} />
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700 }}>{s.title}</div>
                           <div style={{ display: "flex", gap: 5, marginTop: 2 }}>

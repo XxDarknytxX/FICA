@@ -1,9 +1,12 @@
 package com.fica.events.ui.navigation
 
-import android.os.Build
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -28,18 +32,24 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,10 +65,19 @@ import com.fica.events.ui.auth.LoginScreen
 import com.fica.events.ui.auth.SplashScreen
 import com.fica.events.ui.home.HomeScreen
 import com.fica.events.ui.networking.NetworkingScreen
+import com.fica.events.ui.speakers.SpeakersScreen
+import com.fica.events.ui.sponsors.SponsorsScreen
 import com.fica.events.ui.theme.FICABg
+import com.fica.events.ui.theme.FICAGold
 import com.fica.events.ui.theme.FICAMuted
 import com.fica.events.ui.theme.FICANavy
+import com.fica.events.ui.theme.FICANavyLight
+import com.fica.events.ui.theme.FICANavySolid
+import com.fica.events.ui.theme.FICASecondary
 import com.fica.events.ui.voting.VotingScreen
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 // ── Route definitions ───────────────────────────────────────────────────────
 
@@ -74,6 +93,15 @@ sealed class Tab(val route: String, val label: String, val icon: ImageVector) {
     data object Vote : Tab("tab_vote", "Vote", Icons.Default.ThumbUp)
     data object Network : Tab("tab_network", "Network", Icons.Default.People)
     data object Updates : Tab("tab_updates", "Updates", Icons.Default.Notifications)
+}
+
+object NestedRoutes {
+    const val SPEAKERS = "speakers"
+    const val SPONSORS = "sponsors"
+    const val SPEAKER_DETAIL = "speaker/{id}"
+    const val SPONSOR_DETAIL = "sponsor/{id}"
+    const val SESSION_DETAIL = "session/{id}"
+    const val CONVERSATION = "conversation/{otherId}/{otherName}"
 }
 
 private val tabs = listOf(Tab.Home, Tab.Agenda, Tab.Vote, Tab.Network, Tab.Updates)
@@ -143,11 +171,15 @@ fun MainScreen(rootNavController: androidx.navigation.NavHostController = rememb
         ) {
             composable(Tab.Home.route) {
                 showTabBar = true
-                HomeScreen(onLogout = {
-                    rootNavController.navigate(Screen.Login.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                })
+                HomeScreen(
+                    onLogout = {
+                        rootNavController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    onSeeAllSpeakers = { tabNavController.navigate(NestedRoutes.SPEAKERS) },
+                    onSeeAllSponsors = { tabNavController.navigate(NestedRoutes.SPONSORS) },
+                )
             }
             composable(Tab.Agenda.route) {
                 showTabBar = true
@@ -175,6 +207,14 @@ fun MainScreen(rootNavController: androidx.navigation.NavHostController = rememb
                 showTabBar = true
                 AnnouncementsScreen()
             }
+            composable(NestedRoutes.SPEAKERS) {
+                showTabBar = true
+                SpeakersScreen(onBack = { tabNavController.popBackStack() })
+            }
+            composable(NestedRoutes.SPONSORS) {
+                showTabBar = true
+                SponsorsScreen(onBack = { tabNavController.popBackStack() })
+            }
             composable("conversation/{otherId}/{otherName}") { backStackEntry ->
                 showTabBar = false
                 val otherId = backStackEntry.arguments?.getString("otherId")?.toIntOrNull() ?: return@composable
@@ -189,7 +229,7 @@ fun MainScreen(rootNavController: androidx.navigation.NavHostController = rememb
 
         // Floating pill tab bar at the bottom — hidden when in conversation
         if (showTabBar) {
-            FloatingPillTabBar(
+            FloatingGlassTabBar(
                 selectedIndex = selectedIndex,
                 onTabSelected = { index ->
                     selectedIndex = index
@@ -209,94 +249,144 @@ fun MainScreen(rootNavController: androidx.navigation.NavHostController = rememb
     }
 }
 
-// ── Floating Pill Tab Bar (iOS-style capsule) ───────────────────────────────
+// ── Animated Glass Pill Tab Bar ─────────────────────────────────────────────
+// Inspired by the Parking Android app's liquid glass design — adapted for FICA
+// navy/gold theme with a subtle rotating light source on the glass stroke.
 
 @Composable
-private fun FloatingPillTabBar(
+fun FloatingGlassTabBar(
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val tabCount = tabs.size
+
+    // Indicator slide animation (bouncy)
+    val indicatorOffset by animateFloatAsState(
+        targetValue = selectedIndex.toFloat(),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "indicator",
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            .padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
     ) {
-        // The floating pill container
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(72.dp)
                 .shadow(
-                    elevation = 12.dp,
-                    shape = RoundedCornerShape(28.dp),
-                    ambientColor = Color.Black.copy(alpha = 0.08f),
+                    elevation = 14.dp,
+                    shape = RoundedCornerShape(50),
+                    ambientColor = FICANavy.copy(alpha = 0.12f),
+                    spotColor = Color.Black.copy(alpha = 0.12f),
                 )
-                .clip(RoundedCornerShape(28.dp))
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.95f),
-                            Color(0xFFFCFCFE).copy(alpha = 0.98f),
-                        )
+                .clip(RoundedCornerShape(50))
+                // Slightly translucent white — mimics iOS frosted look on FICABg
+                .background(Color.White.copy(alpha = 0.92f))
+                .drawBehind {
+                    val w = size.width
+                    val h = size.height
+
+                    // iOS-style selected pill: light gray CAPSULE (full rounded ellipse),
+                    // not a rectangle. Hugs icon + label tightly.
+                    val hPad = 6.dp.toPx()
+                    val vPad = 6.dp.toPx()
+                    val contentW = w - hPad * 2
+                    val slotW = contentW / tabCount
+                    val pillInset = 4.dp.toPx()
+                    val pillW = slotW - pillInset * 2
+                    val pillH = h - vPad * 2
+                    val pillLeft = hPad + slotW * indicatorOffset + pillInset
+                    val pillTop = vPad
+                    // Capsule shape: corner radius = half of height → full ellipse ends
+                    val pillRadius = CornerRadius(pillH / 2f)
+
+                    // Light gray fill — matches iOS system selection chip
+                    drawRoundRect(
+                        color = Color(0xFFE8EAED),
+                        topLeft = Offset(pillLeft, pillTop),
+                        size = Size(pillW, pillH),
+                        cornerRadius = pillRadius,
                     )
-                )
-                .padding(horizontal = 8.dp, vertical = 5.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically,
+                }
+                .border(
+                    0.5.dp,
+                    Color(0xFFE5E7EB),
+                    RoundedCornerShape(50),
+                ),
         ) {
-            tabs.forEachIndexed { index, tab ->
-                PillTabItem(
-                    tab = tab,
-                    isSelected = selectedIndex == index,
-                    onClick = { onTabSelected(index) },
-                    modifier = Modifier.weight(1f),
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                tabs.forEachIndexed { index, tab ->
+                    GlassTabItem(
+                        tab = tab,
+                        isSelected = selectedIndex == index,
+                        indicatorProximity = 1f - (abs(indicatorOffset - index.toFloat())).coerceAtMost(1f),
+                        onClick = { onTabSelected(index) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PillTabItem(
+private fun GlassTabItem(
     tab: Tab,
     isSelected: Boolean,
+    indicatorProximity: Float,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bgColor by animateColorAsState(
-        targetValue = if (isSelected) FICANavy.copy(alpha = 0.1f) else Color.Transparent,
-        animationSpec = tween(200),
-        label = "tabBg",
+    // iOS style: black icons & labels on the light gray pill, matching the
+    // reference screenshots exactly.
+    val iconColor by animateColorAsState(
+        targetValue = if (isSelected) Color.Black else Color.Black.copy(alpha = 0.78f),
+        animationSpec = tween(220),
+        label = "tabIcon",
     )
-    val contentColor by animateColorAsState(
-        targetValue = if (isSelected) FICANavy else FICAMuted,
-        animationSpec = tween(200),
-        label = "tabColor",
+    val labelColor by animateColorAsState(
+        targetValue = if (isSelected) Color.Black else Color.Black.copy(alpha = 0.62f),
+        animationSpec = tween(220),
+        label = "tabLabel",
     )
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(bgColor)
+            .clip(RoundedCornerShape(14.dp))
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
             ) { onClick() }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             imageVector = tab.icon,
             contentDescription = tab.label,
-            tint = contentColor,
-            modifier = Modifier.size(28.dp),
+            tint = iconColor,
+            modifier = Modifier.size(30.dp),
         )
         Text(
             text = tab.label,
             fontSize = 11.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = contentColor,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+            color = labelColor,
+            lineHeight = 11.sp,
+            modifier = Modifier.offset(y = (-2).dp),
         )
     }
 }

@@ -10,6 +10,7 @@ import Announcements from "./pages/Announcements";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
 import Projects from "./pages/Projects";
+import ResetPassword from "./pages/ResetPassword";
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("token");
@@ -25,6 +26,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
         <Route path="/speakers" element={<Protected><Speakers /></Protected>} />
         <Route path="/agenda" element={<Protected><Agenda /></Protected>} />

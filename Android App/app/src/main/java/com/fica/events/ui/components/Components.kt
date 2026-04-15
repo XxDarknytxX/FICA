@@ -1,5 +1,14 @@
 package com.fica.events.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.ui.res.painterResource
@@ -19,25 +28,41 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -156,7 +181,7 @@ fun FICACard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(6.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.06f))
+            .shadow(2.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.05f))
             .background(FICACard, RoundedCornerShape(16.dp))
             .padding(padding),
     ) {
@@ -466,5 +491,284 @@ fun FICALogoView(height: Dp = 28.dp, modifier: Modifier = Modifier) {
         contentDescription = "FICA Logo",
         modifier = modifier.height(height),
         contentScale = ContentScale.FillHeight,
+    )
+}
+
+// ── FICAInput (polished outlined text field) ───────────────────────────────
+
+@Composable
+fun FICAInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String = "",
+    icon: ImageVector? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    isPassword: Boolean = false,
+    isError: Boolean = false,
+    errorMessage: String? = null,
+    singleLine: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(text = label) },
+            placeholder = if (placeholder.isNotBlank()) {
+                { Text(text = placeholder, color = FICAMuted) }
+            } else null,
+            leadingIcon = if (icon != null) {
+                {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isError) FICADanger else FICAMuted,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            } else null,
+            trailingIcon = if (isPassword) {
+                {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            tint = FICAMuted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            } else null,
+            visualTransformation = if (isPassword && !passwordVisible) {
+                PasswordVisualTransformation()
+            } else {
+                VisualTransformation.None
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            isError = isError,
+            singleLine = singleLine,
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = FICANavy,
+                unfocusedBorderColor = FICABorder,
+                errorBorderColor = FICADanger,
+                focusedLabelColor = FICANavy,
+                unfocusedLabelColor = FICASecondary,
+                errorLabelColor = FICADanger,
+                cursorColor = FICANavy,
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+            ),
+        )
+        if (isError && !errorMessage.isNullOrBlank()) {
+            Text(
+                text = errorMessage,
+                color = FICADanger,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+            )
+        }
+    }
+}
+
+// ── ShimmerBox (single shimmer element) ─────────────────────────────────────
+
+@Composable
+fun ShimmerBox(
+    modifier: Modifier = Modifier,
+    height: Dp = 16.dp,
+    borderRadius: Dp = 8.dp,
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val shimmerX by infiniteTransition.animateFloat(
+        initialValue = -300f,
+        targetValue = 900f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmerX",
+    )
+
+    Box(
+        modifier = modifier
+            .height(height)
+            .clip(RoundedCornerShape(borderRadius))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFFE8ECF1),
+                        Color(0xFFF4F6F9),
+                        Color(0xFFE8ECF1),
+                    ),
+                    start = Offset(shimmerX, 0f),
+                    end = Offset(shimmerX + 300f, 0f),
+                )
+            ),
+    )
+}
+
+/** Full-page shimmer skeleton for a dashboard layout */
+@Composable
+fun DashboardSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(FICABg)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        // Hero card skeleton
+        ShimmerBox(modifier = Modifier.fillMaxWidth(), height = 160.dp, borderRadius = 20.dp)
+
+        // Stats row
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            ShimmerBox(modifier = Modifier.weight(1f), height = 80.dp, borderRadius = 14.dp)
+            ShimmerBox(modifier = Modifier.weight(1f), height = 80.dp, borderRadius = 14.dp)
+            ShimmerBox(modifier = Modifier.weight(1f), height = 80.dp, borderRadius = 14.dp)
+        }
+
+        // Section header
+        ShimmerBox(modifier = Modifier.fillMaxWidth(0.3f).padding(top = 8.dp), height = 14.dp, borderRadius = 4.dp)
+
+        // List items
+        repeat(3) {
+            ShimmerBox(modifier = Modifier.fillMaxWidth(), height = 88.dp, borderRadius = 16.dp)
+        }
+    }
+}
+
+/** List-page shimmer skeleton */
+@Composable
+fun ListSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(FICABg)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // Search bar
+        ShimmerBox(modifier = Modifier.fillMaxWidth(), height = 44.dp, borderRadius = 12.dp)
+        Spacer(modifier = Modifier.height(4.dp))
+        // List items
+        repeat(6) {
+            ShimmerBox(modifier = Modifier.fillMaxWidth(), height = 76.dp, borderRadius = 14.dp)
+        }
+    }
+}
+
+// ── FICACard with click support ─────────────────────────────────────────────
+
+@Composable
+fun FICACardClickable(
+    modifier: Modifier = Modifier,
+    padding: Dp = 18.dp,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(2.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.05f))
+            .clip(RoundedCornerShape(16.dp))
+            .background(FICACard, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(padding),
+    ) {
+        content()
+    }
+}
+
+// ── StatsCard (animated stats card with colored icon) ──────────────────────
+
+@Composable
+fun StatsCard(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    color: Color = FICANavy,
+    modifier: Modifier = Modifier,
+) {
+    val animatedScale by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "statsScale",
+    )
+
+    FICACard(modifier = modifier, padding = 14.dp) {
+        Column(
+            modifier = Modifier.scale(animatedScale),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(color.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Text(
+                text = value,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = FICAText,
+            )
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = FICAMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+// ── FICADivider ─────────────────────────────────────────────────────────────
+
+@Composable
+fun FICADivider(modifier: Modifier = Modifier) {
+    HorizontalDivider(
+        modifier = modifier.fillMaxWidth(),
+        thickness = 1.dp,
+        color = FICABorder,
+    )
+}
+
+// ── TierBadge (for sponsors) ────────────────────────────────────────────────
+
+@Composable
+fun TierBadge(
+    tier: String?,
+    label: String? = null,
+) {
+    val color = com.fica.events.ui.theme.SponsorTierColors.colorFor(tier)
+    val bg = com.fica.events.ui.theme.SponsorTierColors.bgFor(tier)
+    val displayLabel = label ?: com.fica.events.ui.theme.SponsorTierColors.labelFor(tier)
+
+    Text(
+        text = displayLabel.uppercase(),
+        color = color,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.6.sp,
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(50))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }

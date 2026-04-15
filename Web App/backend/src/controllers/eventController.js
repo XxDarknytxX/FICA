@@ -1,5 +1,16 @@
 // src/controllers/eventController.js
 
+import bcrypt from "bcryptjs";
+import {
+  sendEmail,
+  generateResetToken,
+  storeResetToken,
+  validateResetToken,
+  onboardingEmail,
+  resetPasswordEmail,
+  testEmail,
+} from "../utils/mailer.js";
+
 const send = {
   ok: (res, data = {}) => res.json(data),
   created: (res, data = {}) => res.status(201).json(data),
@@ -10,6 +21,28 @@ const send = {
 };
 
 export async function initEventTables(pool) {
+  // Admin users table — owned by the FICA app in this dedicated database.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Bootstrap a default admin if the table is empty so the dashboard is usable
+  // on a fresh install without running the seed.
+  const [[{ count }]] = await pool.query("SELECT COUNT(*) as count FROM users");
+  if (count === 0) {
+    const hash = await bcrypt.hash("admin123", 10);
+    await pool.query(
+      "INSERT INTO users (email, password_hash) VALUES (?, ?)",
+      ["admin@fica.com", hash]
+    );
+    console.log("✓ Bootstrapped default admin: admin@fica.com / admin123");
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS speakers (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -666,18 +699,50 @@ export function makeEventController(pool, broadcastToUser = null) {
     }
   };
 
-  // ─── USER MANAGEMENT (delegate accounts) ─────────────────────────────────
+  // ─── USER MANAGEMENT (delegate + admin accounts) ─────────────────────────
+  // Returns a unified list of every account that can log in, marked by user_type:
+  //   'delegate' → mobile app users (attendees table)
+  //   'admin'    → web dashboard users (users table)
   const getUsers = async (_req, res) => {
     try {
-      const [rows] = await pool.query(`
+      const [delegates] = await pool.query(`
         SELECT id, name, email, organization, job_title, ticket_type,
                registration_code, account_active,
                (password_hash IS NOT NULL) as has_password,
                photo_url, bio, linkedin, twitter, website,
-               check_in_day1, check_in_day2, created_at
+               check_in_day1, check_in_day2, created_at,
+               'delegate' AS user_type
         FROM attendees ORDER BY name ASC
       `);
-      return send.ok(res, { users: rows });
+
+      const [admins] = await pool.query(`
+        SELECT id, email, created_at
+        FROM users ORDER BY email ASC
+      `);
+
+      // Normalize admin rows to match the frontend's user shape
+      const adminRows = admins.map(a => ({
+        id: a.id,
+        name: a.email.split("@")[0],
+        email: a.email,
+        organization: null,
+        job_title: "Administrator",
+        ticket_type: null,
+        registration_code: null,
+        account_active: 1,
+        has_password: 1,
+        photo_url: null,
+        bio: null,
+        linkedin: null,
+        twitter: null,
+        website: null,
+        check_in_day1: 0,
+        check_in_day2: 0,
+        created_at: a.created_at,
+        user_type: "admin",
+      }));
+
+      return send.ok(res, { users: [...adminRows, ...delegates] });
     } catch (e) {
       console.error(e);
       return send.serverErr(res);
@@ -687,10 +752,15 @@ export function makeEventController(pool, broadcastToUser = null) {
   const setUserPassword = async (req, res) => {
     const { id } = req.params;
     const { password } = req.body;
+    const scope = req.body?.scope === "admin" ? "admin" : "delegate";
     if (!password || password.length < 6) return send.bad(res, "Password must be at least 6 characters");
     try {
-      const bcrypt = await import("bcryptjs");
-      const hash = await bcrypt.default.hash(password, 10);
+      const hash = await bcrypt.hash(password, 10);
+      if (scope === "admin") {
+        const [r] = await pool.query("UPDATE users SET password_hash=? WHERE id=?", [hash, id]);
+        if (r.affectedRows === 0) return send.notFound(res, "Admin not found");
+        return send.ok(res, { success: true, message: "Admin password updated." });
+      }
       const [r] = await pool.query(
         "UPDATE attendees SET password_hash=?, account_active=TRUE WHERE id=?",
         [hash, id]
@@ -699,6 +769,58 @@ export function makeEventController(pool, broadcastToUser = null) {
       return send.ok(res, { success: true, message: "Password set. Account is now active." });
     } catch (e) {
       console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // PUT /api/event/users/:id   body: { scope, email, name, organization, job_title, phone, ticket_type, dietary_requirements, password? }
+  // Unified edit endpoint used by the refreshed user management modal.
+  const updateUser = async (req, res) => {
+    const { id } = req.params;
+    const scope = req.body?.scope === "admin" ? "admin" : "delegate";
+    const {
+      email, name, organization, job_title, phone, ticket_type, dietary_requirements, password,
+    } = req.body;
+    try {
+      if (scope === "admin") {
+        if (!email) return send.bad(res, "Email is required");
+        const updates = ["email=?"];
+        const vals = [email];
+        if (password) {
+          if (password.length < 6) return send.bad(res, "Password must be at least 6 characters");
+          updates.push("password_hash=?");
+          vals.push(await bcrypt.hash(password, 10));
+        }
+        vals.push(id);
+        const [r] = await pool.query(`UPDATE users SET ${updates.join(", ")} WHERE id=?`, vals);
+        if (r.affectedRows === 0) return send.notFound(res, "Admin not found");
+        return send.ok(res, { success: true });
+      }
+
+      // Delegate
+      if (!name || !email) return send.bad(res, "Name and email are required");
+      const updates = [
+        "name=?", "email=?", "organization=?", "job_title=?", "phone=?",
+        "ticket_type=?", "dietary_requirements=?",
+      ];
+      const vals = [
+        name, email, organization || null, job_title || null, phone || null,
+        ticket_type || "full", dietary_requirements || null,
+      ];
+      if (password) {
+        if (password.length < 6) return send.bad(res, "Password must be at least 6 characters");
+        updates.push("password_hash=?", "account_active=TRUE");
+        vals.push(await bcrypt.hash(password, 10));
+      }
+      vals.push(id);
+      const [r] = await pool.query(`UPDATE attendees SET ${updates.join(", ")} WHERE id=?`, vals);
+      if (r.affectedRows === 0) return send.notFound(res, "Delegate not found");
+      return send.ok(res, { success: true });
+    } catch (e) {
+      console.error("updateUser error:", e);
+      if (String(e.message).includes("Duplicate")) {
+        return send.bad(res, "That email is already used by another account");
+      }
       return send.serverErr(res);
     }
   };
@@ -1395,6 +1517,154 @@ export function makeEventController(pool, broadcastToUser = null) {
     }
   };
 
+  // ─── EMAIL: ONBOARDING & PASSWORD RESET ─────────────────────────────────
+  // Works for both admins (users table) and delegates (attendees table).
+  // Requires ?type=admin|delegate in the request body or params.
+
+  async function loadUser(scope, id) {
+    if (scope === "admin") {
+      const [rows] = await pool.query("SELECT id, email FROM users WHERE id=?", [id]);
+      if (!rows[0]) return null;
+      return { id: rows[0].id, email: rows[0].email, firstName: rows[0].email.split("@")[0] };
+    }
+    const [rows] = await pool.query("SELECT id, email, name FROM attendees WHERE id=?", [id]);
+    if (!rows[0]) return null;
+    return { id: rows[0].id, email: rows[0].email, firstName: (rows[0].name || "").split(" ")[0] };
+  }
+
+  // POST /api/event/users/:id/send-onboarding  body: { scope: 'admin'|'delegate' }
+  const sendUserOnboarding = async (req, res) => {
+    const { id } = req.params;
+    const scope = req.body?.scope === "admin" ? "admin" : "delegate";
+    try {
+      const user = await loadUser(scope, id);
+      if (!user) return send.notFound(res, "User not found");
+
+      const token = generateResetToken();
+      await storeResetToken(pool, { scope, userId: id, token });
+
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+      await sendEmail(pool, {
+        to: user.email,
+        subject: scope === "admin"
+          ? "FICA Congress Admin — Set up your account"
+          : "Welcome to FICA Congress 2026 — Set up your account",
+        html: onboardingEmail({
+          firstName: user.firstName,
+          email: user.email,
+          resetLink,
+          accountType: scope,
+        }),
+      });
+
+      return send.ok(res, { success: true, message: `Onboarding email sent to ${user.email}` });
+    } catch (e) {
+      console.error("sendUserOnboarding error:", e);
+      return send.bad(res, e.message || "Failed to send onboarding email");
+    }
+  };
+
+  // POST /api/event/users/:id/send-reset  body: { scope: 'admin'|'delegate' }
+  const sendUserResetPassword = async (req, res) => {
+    const { id } = req.params;
+    const scope = req.body?.scope === "admin" ? "admin" : "delegate";
+    try {
+      const user = await loadUser(scope, id);
+      if (!user) return send.notFound(res, "User not found");
+
+      const token = generateResetToken();
+      await storeResetToken(pool, { scope, userId: id, token });
+
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+      await sendEmail(pool, {
+        to: user.email,
+        subject: "FICA Congress — Password Reset",
+        html: resetPasswordEmail({
+          firstName: user.firstName,
+          resetLink,
+        }),
+      });
+
+      return send.ok(res, { success: true, message: `Reset email sent to ${user.email}` });
+    } catch (e) {
+      console.error("sendUserResetPassword error:", e);
+      return send.bad(res, e.message || "Failed to send reset email");
+    }
+  };
+
+  // POST /api/reset-password  body: { token, password }   (PUBLIC endpoint)
+  const consumeResetToken = async (req, res) => {
+    const { token, password } = req.body;
+    if (!token || !password) return send.bad(res, "Token and password are required");
+    if (password.length < 6) return send.bad(res, "Password must be at least 6 characters");
+    try {
+      const { scope, userId } = await validateResetToken(pool, token);
+      const hash = await bcrypt.hash(password, 10);
+
+      if (scope === "admin") {
+        await pool.query("UPDATE users SET password_hash=? WHERE id=?", [hash, userId]);
+      } else {
+        await pool.query(
+          "UPDATE attendees SET password_hash=?, account_active=TRUE WHERE id=?",
+          [hash, userId]
+        );
+      }
+      return send.ok(res, { success: true, message: "Password updated successfully" });
+    } catch (e) {
+      return send.bad(res, e.message);
+    }
+  };
+
+  // DELETE /api/event/users/:id  body: { scope: 'admin'|'delegate' }
+  const deleteUser = async (req, res) => {
+    const { id } = req.params;
+    const scope = req.body?.scope === "admin" ? "admin" : "delegate";
+    try {
+      if (scope === "admin") {
+        // Prevent deleting the last admin — lockout guard
+        const [[{ count }]] = await pool.query("SELECT COUNT(*) as count FROM users");
+        if (count <= 1) {
+          return send.bad(res, "Cannot delete the last admin. Create another admin first.");
+        }
+        const [r] = await pool.query("DELETE FROM users WHERE id=?", [id]);
+        if (r.affectedRows === 0) return send.notFound(res, "Admin not found");
+      } else {
+        const [r] = await pool.query("DELETE FROM attendees WHERE id=?", [id]);
+        if (r.affectedRows === 0) return send.notFound(res, "Delegate not found");
+      }
+      // Clean up any pending reset tokens for this user
+      await pool.query(
+        "DELETE FROM event_settings WHERE setting_key = ?",
+        [`reset_token_${scope}_${id}`]
+      );
+      return send.ok(res, { success: true, message: "Account deleted" });
+    } catch (e) {
+      console.error("deleteUser error:", e);
+      return send.serverErr(res);
+    }
+  };
+
+  // POST /api/event/settings/test-smtp  body: { to }
+  const sendTestSmtp = async (req, res) => {
+    const { to } = req.body || {};
+    if (!to) return send.bad(res, "Recipient email required");
+    try {
+      await sendEmail(pool, {
+        to,
+        subject: "FICA Congress — SMTP Test Email",
+        html: testEmail(),
+      });
+      return send.ok(res, { success: true, message: `Test email sent to ${to}` });
+    } catch (e) {
+      console.error("sendTestSmtp error:", e);
+      return send.bad(res, e.message || "Failed to send test email");
+    }
+  };
+
   return {
     getStats: getStatsNew,
     getSpeakers, createSpeaker, updateSpeaker, deleteSpeaker,
@@ -1405,8 +1675,11 @@ export function makeEventController(pool, broadcastToUser = null) {
     getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement,
     getSettings, updateSettings,
     // User management
-    getUsers, setUserPassword, toggleUserActive, updateUserProfile,
+    getUsers, setUserPassword, toggleUserActive, updateUserProfile, updateUser,
     delegateLogin, getMyProfile,
+    // Email / account recovery
+    sendUserOnboarding, sendUserResetPassword, consumeResetToken, sendTestSmtp,
+    deleteUser,
     // Directory & networking
     getDirectory, getAttendeeProfile,
     // Messaging

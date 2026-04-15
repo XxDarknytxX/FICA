@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,7 +29,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
@@ -169,18 +176,21 @@ fun VotingScreen() {
             .fillMaxSize()
             .background(FICABg),
     ) {
-        // Top bar
-        CenterAlignedTopAppBar(
-            title = {
-                Text(
-                    text = "Project Voting",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = FICAText,
-                )
-            },
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = FICABg),
-        )
+        // Top bar — matches Agenda/Networking/Updates title style
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 14.dp, bottom = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Project Voting",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = FICAText,
+            )
+        }
 
         if (isLoading) {
             LoadingView()
@@ -243,7 +253,7 @@ fun VotingScreen() {
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(140.dp)) }
+                item { Spacer(modifier = Modifier.height(100.dp)) }
             }
         }
     }
@@ -417,7 +427,7 @@ private fun TabButton(
     }
 }
 
-// ── Project Card ───────────────────────────────────────────────────────────
+// ── Project Card (image-less, iOS-style) ───────────────────────────────────
 
 @Composable
 private fun ProjectCard(
@@ -426,172 +436,175 @@ private fun ProjectCard(
     onClick: () -> Unit,
 ) {
     val catColor = ProjectCategory.colorFor(project.category)
+    val catIcon = categoryIcon(project.category)
+    val voteCount = project.vote_count ?: 0
 
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .shadow(1.5.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .clip(RoundedCornerShape(16.dp))
+            .background(FICACard)
             .then(
-                if (isMyVote) {
-                    Modifier.border(2.dp, FICASuccess.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                } else {
-                    Modifier
-                }
-            ),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = FICACard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                if (isMyVote) Modifier.border(1.5.dp, FICASuccess.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                else Modifier
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column {
-            // Image section
-            Box(
+        // Row 1: category chip + vote count pill
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp),
+                    .background(catColor.copy(alpha = 0.12f), RoundedCornerShape(50))
+                    .padding(horizontal = 9.dp, vertical = 4.dp),
             ) {
-                if (!project.image_url.isNullOrBlank()) {
-                    AsyncImage(
-                        model = project.image_url,
-                        contentDescription = project.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-                    )
-                } else {
-                    // Category placeholder
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(catColor.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.EmojiEvents,
-                            contentDescription = null,
-                            tint = catColor.copy(alpha = 0.5f),
-                            modifier = Modifier.size(32.dp),
-                        )
-                    }
-                }
-
-                // Vote count pill overlay
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.BarChart,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(9.dp),
-                    )
-                    Text(
-                        text = "${project.vote_count ?: 0}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                }
-            }
-
-            // Content
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
+                Icon(
+                    imageVector = catIcon,
+                    contentDescription = null,
+                    tint = catColor,
+                    modifier = Modifier.size(12.dp),
+                )
                 Text(
-                    text = project.name,
-                    fontSize = 15.sp,
+                    text = (project.category ?: "other").uppercase(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = catColor,
+                    letterSpacing = 0.5.sp,
+                    lineHeight = 12.sp,
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .background(FICAInputBg, RoundedCornerShape(50))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ThumbUp,
+                    contentDescription = null,
+                    tint = FICANavy,
+                    modifier = Modifier.size(11.dp),
+                )
+                Text(
+                    text = "$voteCount",
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = FICAText,
-                    maxLines = 2,
+                    lineHeight = 14.sp,
                 )
-
-                if (!project.team.isNullOrBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Groups,
-                            contentDescription = null,
-                            tint = FICASecondary,
-                            modifier = Modifier.size(9.dp),
-                        )
-                        Text(
-                            text = project.team,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = FICASecondary,
-                        )
-                    }
-                }
-
-                // Category badge
-                Row(
-                    modifier = Modifier
-                        .background(catColor.copy(alpha = 0.12f), RoundedCornerShape(50))
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = project.category?.replaceFirstChar { it.uppercase() } ?: "Other",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = catColor,
-                    )
-                }
-
-                // Tap hint + vote status
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Tap to view details",
-                        fontSize = 11.sp,
-                        color = FICAMuted,
-                    )
-                    if (isMyVote) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.CheckCircle,
-                                contentDescription = null,
-                                tint = FICASuccess,
-                                modifier = Modifier.size(11.dp),
-                            )
-                            Text(
-                                text = "Your Vote",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = FICASuccess,
-                            )
-                        }
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.ChevronRight,
-                            contentDescription = null,
-                            tint = FICAMuted,
-                            modifier = Modifier.size(11.dp),
-                        )
-                    }
-                }
             }
         }
+
+        // Row 2: title
+        Text(
+            text = project.name,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            color = FICAText,
+            lineHeight = 21.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+
+        // Row 3: team (small muted with groups icon)
+        if (!project.team.isNullOrBlank()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Groups,
+                    contentDescription = null,
+                    tint = FICAMuted,
+                    modifier = Modifier.size(12.dp),
+                )
+                Text(
+                    text = project.team,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = FICAMuted,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        // Row 4: description preview (2 lines)
+        if (!project.description.isNullOrBlank()) {
+            Text(
+                text = project.description,
+                fontSize = 13.sp,
+                color = FICASecondary,
+                lineHeight = 18.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        // Row 5: status footer — "Your Vote" badge or Tap-to-view hint
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (isMyVote) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier
+                        .background(FICASuccess.copy(alpha = 0.10f), RoundedCornerShape(50))
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = FICASuccess,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Text(
+                        text = "Your Vote",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = FICASuccess,
+                        lineHeight = 13.sp,
+                    )
+                }
+            } else {
+                Text(
+                    text = "View details",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = FICAGold,
+                    lineHeight = 14.sp,
+                )
+            }
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = FICAMuted,
+                modifier = Modifier.size(14.dp),
+            )
+        }
     }
+}
+
+/** Returns a themed icon for a project category. */
+private fun categoryIcon(category: String?): ImageVector = when (category?.lowercase()) {
+    "innovation" -> Icons.Filled.Lightbulb
+    "sustainability" -> Icons.Filled.Eco
+    "technology" -> Icons.Filled.Memory
+    "community" -> Icons.Filled.Groups
+    else -> Icons.Filled.EmojiEvents
 }
 
 // ── Result Row ─────────────────────────────────────────────────────────────
@@ -762,72 +775,58 @@ private fun ProjectDetailSheet(
         )
     }
 
+    val catIcon = categoryIcon(project.category)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
     ) {
-        // Hero image
+        // Hero — themed color band with big category icon (no image)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp),
-        ) {
-            if (!project.image_url.isNullOrBlank()) {
-                AsyncImage(
-                    model = project.image_url,
-                    contentDescription = project.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(catColor.copy(alpha = 0.15f), catColor.copy(alpha = 0.05f))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.EmojiEvents,
-                        contentDescription = null,
-                        tint = catColor.copy(alpha = 0.4f),
-                        modifier = Modifier.size(48.dp),
+                .height(140.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(catColor.copy(alpha = 0.18f), catColor.copy(alpha = 0.06f))
                     )
-                }
-            }
-
-            // Gradient overlay
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            // Soft circular bg for the icon
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
-                        )
-                    ),
-            )
+                    .size(80.dp)
+                    .background(catColor.copy(alpha = 0.14f), CircleShape)
+                    .border(1.5.dp, catColor.copy(alpha = 0.30f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = catIcon,
+                    contentDescription = null,
+                    tint = catColor,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
 
-            // Category badge on image
+            // Category pill in top-right corner
             Row(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.TopEnd)
                     .padding(16.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(50))
+                    .background(Color.White, RoundedCornerShape(50))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = project.category?.replaceFirstChar { it.uppercase() } ?: "Other",
-                    fontSize = 12.sp,
+                    text = (project.category ?: "other").uppercase(),
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = catColor,
+                    letterSpacing = 0.5.sp,
+                    lineHeight = 12.sp,
                 )
             }
         }
@@ -835,15 +834,16 @@ private fun ProjectDetailSheet(
         // Content
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // Title & Team
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = project.name,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = FICAText,
+                    lineHeight = 26.sp,
                 )
                 if (!project.team.isNullOrBlank()) {
                     Row(
@@ -854,13 +854,14 @@ private fun ProjectDetailSheet(
                             imageVector = Icons.Filled.Groups,
                             contentDescription = null,
                             tint = FICASecondary,
-                            modifier = Modifier.size(12.dp),
+                            modifier = Modifier.size(14.dp),
                         )
                         Text(
                             text = project.team,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = FICASecondary,
+                            lineHeight = 17.sp,
                         )
                     }
                 }
@@ -937,33 +938,29 @@ private fun ProjectDetailSheet(
 
             // Description
             if (!project.description.isNullOrBlank()) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = FICACard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(1.5.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(FICACard)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                text = "About this Project",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = FICAText,
-                            )
-                        }
-                        Text(
-                            text = project.description,
-                            fontSize = 15.sp,
-                            color = FICASecondary,
-                            lineHeight = 22.sp,
-                        )
-                    }
+                    Text(
+                        text = "ABOUT",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FICAMuted,
+                        letterSpacing = 0.6.sp,
+                        lineHeight = 13.sp,
+                    )
+                    Text(
+                        text = project.description,
+                        fontSize = 14.sp,
+                        color = FICASecondary,
+                        lineHeight = 20.sp,
+                    )
                 }
             }
 

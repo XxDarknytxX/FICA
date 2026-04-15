@@ -63,7 +63,7 @@ const admin = makeAdminController(pool);
 const event = makeEventController(pool, broadcastToUser);
 
 // Admin panel routes
-app.use("/api", makeAuthRouter(admin));
+app.use("/api", makeAuthRouter(admin, event));
 app.use("/api/event", makeEventRouter(event));
 
 // Mobile app (delegate) routes

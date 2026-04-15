@@ -1,79 +1,45 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Trophy, Users, BarChart3, Eye, Power } from "lucide-react";
+import {
+  Plus, Pencil, Trash2, Trophy, Users, BarChart3, Eye, Power,
+  ImageIcon,
+} from "lucide-react";
 import Layout from "../components/Layout";
-import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
-import Badge from "../components/Badge";
 import { api } from "../services/api";
+import {
+  Toast, useToast, StatCard, IconBtn, Chip, SegmentedTabs,
+  LoadingState, EmptyState, ActionModal, ConfirmModal,
+  Field, GhostBtn, GoldBtn,
+} from "../components/ui";
 
 const CATEGORIES = ["innovation", "sustainability", "technology", "community", "other"];
+
+const CAT_STYLES = {
+  innovation:     { color: "#6b21a8", bg: "#f5f3ff", border: "#ddd6fe" },
+  sustainability: { color: "#276749", bg: "#f0fff4", border: "#9ae6b4" },
+  technology:     { color: "#2c5282", bg: "#ebf8ff", border: "#bee3f8" },
+  community:      { color: "#c05621", bg: "#ffedd5", border: "#fdba74" },
+  other:          { color: "#64748b", bg: "#f8fafc", border: "#cbd5e1" },
+};
 
 const EMPTY = {
   name: "", description: "", team: "", image_url: "", category: "innovation", display_order: 0
 };
 
-const CAT_COLORS = {
-  innovation: "#6b21a8", sustainability: "#276749", technology: "#2c5282",
-  community: "#c05621", other: "#718096"
-};
-
-function ProjectForm({ form, setForm, onSave, onCancel, saving, err }) {
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
-  return (
-    <div>
-      {err && <div style={{ background: "#fff5f5", border: "1px solid #fed7d7", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#c53030" }}>{err}</div>}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
-        <div style={{ gridColumn: "1/-1" }}>
-          <label className="label">Project Name *</label>
-          <input className="input" value={form.name} onChange={set("name")} placeholder="e.g. Smart Water Monitoring System" required />
-        </div>
-        <div>
-          <label className="label">Team / Author</label>
-          <input className="input" value={form.team} onChange={set("team")} placeholder="e.g. Team Innovate" />
-        </div>
-        <div>
-          <label className="label">Category</label>
-          <select className="input" value={form.category} onChange={set("category")}>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-          </select>
-        </div>
-        <div style={{ gridColumn: "1/-1" }}>
-          <label className="label">Image URL</label>
-          <input className="input" value={form.image_url} onChange={set("image_url")} placeholder="https://..." />
-        </div>
-        <div style={{ gridColumn: "1/-1" }}>
-          <label className="label">Description</label>
-          <textarea className="input" value={form.description} onChange={set("description")} rows={4} placeholder="Describe the project..." />
-        </div>
-        <div>
-          <label className="label">Display Order</label>
-          <input className="input" type="number" value={form.display_order} onChange={set("display_order")} min={0} />
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
-        <button onClick={onCancel} className="btn-ghost">Cancel</button>
-        <button onClick={onSave} className="btn-gold" disabled={saving}>{saving ? "Saving..." : "Save Project"}</button>
-      </div>
-    </div>
-  );
-}
-
 export default function Projects() {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(false);
-  const [form, setForm] = useState(EMPTY);
-  const [editId, setEditId] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [tab, setTab] = useState("manage");
-
-  // Results state
+  const [projects, setProjects] = useState([]);
   const [results, setResults] = useState(null);
   const [votingOpen, setVotingOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [toggleVotingConfirm, setToggleVotingConfirm] = useState(false);
   const [voterModal, setVoterModal] = useState(null);
   const [voters, setVoters] = useState([]);
+  const { message, show } = useToast();
 
   async function load() {
     try {
@@ -83,45 +49,64 @@ export default function Projects() {
       } else {
         const data = await api("/event/votes/results");
         setResults(data);
-        setVotingOpen(data.votingOpen);
+        setVotingOpen(!!data.votingOpen);
       }
     } catch (e) {
-      console.error(e);
+      show("error", e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
   useEffect(() => { setLoading(true); load(); }, [tab]);
 
-  function openAdd() { setForm(EMPTY); setEditId(null); setErr(""); setModal(true); }
-  function openEdit(p) { setForm({ ...p }); setEditId(p.id); setErr(""); setModal(true); }
-  function closeModal() { setModal(false); setErr(""); }
+  function openAdd() { setModal({ form: { ...EMPTY }, editId: null }); }
+  function openEdit(p) { setModal({ form: { ...EMPTY, ...p }, editId: p.id }); }
+  function closeModal() { if (!saving) setModal(null); }
+  function setField(k, v) { setModal(m => ({ ...m, form: { ...m.form, [k]: v } })); }
 
   async function save() {
-    setErr(""); setSaving(true);
+    if (!modal.form.name.trim()) return show("error", "Project name is required");
+    setSaving(true);
     try {
-      if (!editId) await api("/event/projects", { method: "POST", body: form });
-      else await api(`/event/projects/${editId}`, { method: "PUT", body: form });
-      closeModal();
+      if (modal.editId) {
+        await api(`/event/projects/${modal.editId}`, { method: "PUT", body: modal.form });
+        show("success", `${modal.form.name} updated`);
+      } else {
+        await api("/event/projects", { method: "POST", body: modal.form });
+        show("success", `${modal.form.name} added`);
+      }
+      setModal(null);
       await load();
     } catch (e) {
-      setErr(e.message);
+      show("error", e.message);
     } finally {
       setSaving(false);
     }
   }
 
-  async function doDelete(id) {
-    await api(`/event/projects/${id}`, { method: "DELETE" });
-    setDeleteConfirm(null);
-    await load();
+  async function confirmDelete() {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      await api(`/event/projects/${deleteConfirm.id}`, { method: "DELETE" });
+      show("success", `${deleteConfirm.name} removed`);
+      setDeleteConfirm(null);
+      await load();
+    } catch (e) {
+      show("error", e.message);
+    } finally {
+      setDeleting(false);
+    }
   }
 
-  async function handleToggleVoting() {
+  async function toggleVoting() {
     try {
       await api("/event/votes/toggle", { method: "POST", body: { open: !votingOpen } });
       setVotingOpen(!votingOpen);
+      setToggleVotingConfirm(false);
+      show("success", !votingOpen ? "Voting opened" : "Voting closed");
     } catch (e) {
-      console.error(e);
+      show("error", e.message);
     }
   }
 
@@ -131,7 +116,7 @@ export default function Projects() {
       const data = await api(`/event/votes/details/${projectId}`);
       setVoters(data.voters || []);
     } catch (e) {
-      console.error(e);
+      show("error", e.message);
       setVoters([]);
     }
   }
@@ -143,168 +128,158 @@ export default function Projects() {
 
   return (
     <Layout>
-      <div style={{ padding: 28 }} className="animate-in">
+      <div style={{ padding: "8px 0 28px" }} className="animate-in">
         <PageHeader
           title="Projects & Voting"
-          subtitle={tab === "manage"
-            ? `${projects.length} project${projects.length !== 1 ? "s" : ""} registered`
-            : `${results?.totalVotes ?? 0} votes cast`}
-          action={tab === "manage"
-            ? <button className="btn-gold" onClick={openAdd}><Plus size={16} /> Add Project</button>
-            : null}
+          subtitle="Showcase delegate projects and run live voting"
+          action={tab === "manage" ? (
+            <GoldBtn onClick={openAdd}><Plus size={15} /> Add Project</GoldBtn>
+          ) : null}
         />
 
-        {/* Tab Selector */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 24, background: "#f0f4f8", borderRadius: 10, padding: 4, width: "fit-content" }}>
-          {[{ key: "manage", label: "Manage Projects", icon: Trophy }, { key: "results", label: "Vote Results", icon: BarChart3 }].map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer",
-              fontSize: 13, fontWeight: 600,
-              background: tab === t.key ? "white" : "transparent",
-              color: tab === t.key ? "#0F2D5E" : "#718096",
-              boxShadow: tab === t.key ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-              transition: "all 0.2s"
-            }}>
-              <t.icon size={14} /> {t.label}
-            </button>
-          ))}
+        <Toast message={message} />
+
+        {/* Top tab control */}
+        <div style={{ marginBottom: 14 }}>
+          <SegmentedTabs
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "manage", label: "Manage Projects", icon: Trophy, count: projects.length },
+              { value: "results", label: "Vote Results", icon: BarChart3 },
+            ]}
+          />
         </div>
 
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#a0aec0" }}>Loading...</div>
+          <LoadingState label={tab === "manage" ? "Loading projects…" : "Loading results…"} />
         ) : tab === "manage" ? (
-          /* ─── MANAGE TAB ────────────────────────────────────────── */
-          <>
-            {projects.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 60, color: "#a0aec0" }}>
-                <Trophy size={40} color="#e2e8f0" style={{ marginBottom: 12 }} />
-                <div style={{ fontWeight: 600, fontSize: 15 }}>No projects yet</div>
-                <div style={{ fontSize: 13, marginTop: 4 }}>Add your first project to get started</div>
-              </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
-                {projects.map(p => {
-                  const catColor = CAT_COLORS[p.category] || "#718096";
-                  return (
-                    <div key={p.id} className="card" style={{ padding: 0, overflow: "hidden" }}>
-                      {/* Image */}
-                      <div style={{ height: 140, background: "#f0f4f8", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "1px solid #e2e8f0" }}>
-                        {p.image_url ? (
-                          <img src={p.image_url} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
-                        ) : (
-                          <Trophy size={32} color="#cbd5e0" />
-                        )}
-                      </div>
-                      <div style={{ padding: 16 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <div>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a202c" }}>{p.name}</div>
-                            {p.team && <div style={{ fontSize: 12, color: "#718096", marginTop: 2 }}>{p.team}</div>}
-                          </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button onClick={() => openEdit(p)} className="btn-ghost" style={{ padding: "3px 7px" }}><Pencil size={13} /></button>
-                            <button onClick={() => setDeleteConfirm(p)} className="btn-danger" style={{ padding: "3px 7px" }}><Trash2 size={13} /></button>
-                          </div>
-                        </div>
-                        <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}>
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                            background: `${catColor}15`, color: catColor, textTransform: "capitalize"
-                          }}>{p.category || "other"}</span>
-                          <span style={{ fontSize: 11, color: "#a0aec0", display: "flex", alignItems: "center", gap: 3 }}>
-                            <Users size={11} /> {p.vote_count ?? 0} votes
-                          </span>
-                        </div>
-                        {p.description && (
-                          <div style={{ fontSize: 12, color: "#718096", marginTop: 8, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                            {p.description}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
+          projects.length === 0 ? (
+            <EmptyState
+              Icon={Trophy}
+              title="No projects yet"
+              subtitle="Add your first project for delegates to explore and vote on."
+            />
+          ) : (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+              gap: 14,
+            }}>
+              {projects.map(p => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  onEdit={() => openEdit(p)}
+                  onDelete={() => setDeleteConfirm(p)}
+                />
+              ))}
+            </div>
+          )
         ) : (
-          /* ─── RESULTS TAB ───────────────────────────────────────── */
           <>
-            {/* Voting toggle + stats */}
-            <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-              <button onClick={handleToggleVoting} style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 700,
-                background: votingOpen ? "#c6f6d5" : "#fed7d7",
-                color: votingOpen ? "#276749" : "#c53030",
+            {/* Results header */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+              <div className="card" style={{
+                padding: "14px 16px",
+                background: votingOpen
+                  ? "linear-gradient(135deg, #f0fff4, #ecfdf5)"
+                  : "linear-gradient(135deg, #fff5f5, #ffe5e5)",
+                border: `1px solid ${votingOpen ? "#9ae6b4" : "#fed7d7"}`,
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
               }}>
-                <Power size={16} /> Voting is {votingOpen ? "OPEN" : "CLOSED"}
-              </button>
-              <div className="card" style={{ padding: "10px 20px", display: "flex", gap: 24, alignItems: "center" }}>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#1a202c" }}>{results?.totalVotes ?? 0}</div>
-                  <div style={{ fontSize: 11, color: "#a0aec0" }}>Total Votes</div>
+                <div>
+                  <div style={{
+                    fontSize: 11, fontWeight: 700,
+                    color: votingOpen ? "#276749" : "#c53030",
+                    textTransform: "uppercase", letterSpacing: "0.05em",
+                  }}>
+                    Voting is {votingOpen ? "OPEN" : "CLOSED"}
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: votingOpen ? "#276749" : "#c53030", marginTop: 4 }}>
+                    {votingOpen ? "Delegates can vote now" : "Voting is paused"}
+                  </div>
                 </div>
-                <div style={{ width: 1, height: 36, background: "#e2e8f0" }} />
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#1a202c" }}>{results?.totalDelegates ?? 0}</div>
-                  <div style={{ fontSize: 11, color: "#a0aec0" }}>Eligible Delegates</div>
-                </div>
-                <div style={{ width: 1, height: 36, background: "#e2e8f0" }} />
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#0F2D5E" }}>{participation}%</div>
-                  <div style={{ fontSize: 11, color: "#a0aec0" }}>Participation</div>
-                </div>
+                <button
+                  onClick={() => setToggleVotingConfirm(true)}
+                  style={{
+                    width: 42, height: 42, borderRadius: 12, border: "none", cursor: "pointer",
+                    background: votingOpen ? "#dc2626" : "#059669", color: "white",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                  title={votingOpen ? "Close voting" : "Open voting"}
+                >
+                  <Power size={18} />
+                </button>
               </div>
+              <StatCard label="Total Votes" value={results?.totalVotes ?? 0} icon={Users} color="#0F2D5E" />
+              <StatCard label="Eligible Delegates" value={results?.totalDelegates ?? 0} icon={Users} color="#2c5282" />
+              <StatCard label="Participation" value={`${participation}%`} icon={BarChart3} color="#7c3aed" />
             </div>
 
             {/* Leaderboard */}
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 8 }}>
-                <BarChart3 size={16} color="#0F2D5E" />
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#1a202c" }}>Leaderboard</span>
+              <div style={{
+                padding: "14px 18px", borderBottom: "1px solid #f1f5f9",
+                display: "flex", alignItems: "center", gap: 8, background: "#f8fafc",
+              }}>
+                <BarChart3 size={15} color="#0F2D5E" />
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Live Leaderboard</div>
               </div>
               {(results?.projects || []).length === 0 ? (
-                <div style={{ textAlign: "center", padding: 40, color: "#a0aec0", fontSize: 13 }}>No projects to show</div>
+                <div style={{ textAlign: "center", padding: 40, color: "#94a3b8", fontSize: 13 }}>
+                  No projects to rank
+                </div>
               ) : (
                 (results?.projects || []).map((p, i) => {
                   const pct = maxVotes > 0 ? ((p.vote_count || 0) / maxVotes) * 100 : 0;
-                  const catColor = CAT_COLORS[p.category] || "#718096";
+                  const cs = CAT_STYLES[p.category] || CAT_STYLES.other;
+                  const isWinner = i === 0 && (p.vote_count || 0) > 0;
                   return (
-                    <div key={p.id} style={{
-                      display: "flex", alignItems: "center", gap: 14, padding: "14px 20px",
-                      borderBottom: "1px solid #f0f4f8",
-                      background: i === 0 && p.vote_count > 0 ? "#fffff0" : "white"
-                    }}>
+                    <div
+                      key={p.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 14, padding: "14px 18px",
+                        borderBottom: "1px solid #f1f5f9",
+                        background: isWinner ? "linear-gradient(90deg, #fffbeb, transparent 60%)" : "transparent",
+                      }}
+                    >
                       <div style={{
-                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                        background: i === 0 && p.vote_count > 0 ? "#C8A951" : i === 1 ? "#a0aec0" : i === 2 ? "#c05621" : "#e2e8f0",
-                        color: i < 3 && p.vote_count > 0 ? "white" : "#718096",
+                        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                        background: isWinner ? "linear-gradient(135deg, #C8A951, #e2c87a)"
+                                 : i === 1 ? "#cbd5e1"
+                                 : i === 2 ? "#fca5a5" : "#eef2ff",
+                        color: isWinner ? "white" : i === 1 ? "white" : i === 2 ? "white" : "#64748b",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 14, fontWeight: 800
+                        fontSize: 14, fontWeight: 800,
                       }}>
-                        {i === 0 && p.vote_count > 0 ? <Trophy size={16} /> : `#${i + 1}`}
+                        {isWinner ? <Trophy size={16} /> : `#${i + 1}`}
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: "#1a202c" }}>{p.name}</span>
-                          {p.team && <span style={{ fontSize: 11, color: "#a0aec0" }}>{p.team}</span>}
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20,
-                            background: `${catColor}15`, color: catColor, textTransform: "capitalize"
-                          }}>{p.category || "other"}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{p.name}</span>
+                          {p.team && <span style={{ fontSize: 11, color: "#94a3b8" }}>{p.team}</span>}
+                          <Chip label={p.category || "other"} color={cs.color} bg={cs.bg} border={cs.border} small uppercase />
                         </div>
-                        <div style={{ marginTop: 6, height: 6, background: "#f0f4f8", borderRadius: 3, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${pct}%`, background: i === 0 ? "#C8A951" : "#0F2D5E", borderRadius: 3, transition: "width 0.5s ease" }} />
+                        <div style={{ marginTop: 6, height: 6, background: "#f1f5f9", borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%", width: `${pct}%`,
+                            background: isWinner ? "linear-gradient(90deg, #C8A951, #e2c87a)" : "linear-gradient(90deg, #0F2D5E, #1a4080)",
+                            borderRadius: 3, transition: "width 0.5s ease",
+                          }} />
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: "#1a202c" }}>{p.vote_count || 0}</div>
-                        <div style={{ fontSize: 10, color: "#a0aec0" }}>votes</div>
+                      <div style={{ textAlign: "right", flexShrink: 0, minWidth: 58 }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>{p.vote_count || 0}</div>
+                        <div style={{ fontSize: 10, color: "#94a3b8" }}>votes</div>
                       </div>
-                      <button onClick={() => showVoters(p.id)} className="btn-ghost" style={{ padding: "4px 8px" }} title="View voters">
-                        <Eye size={14} />
-                      </button>
+                      <IconBtn
+                        Icon={Eye}
+                        color="#0F2D5E"
+                        bg="#eef2ff"
+                        title="View voters"
+                        onClick={() => showVoters(p.id)}
+                      />
                     </div>
                   );
                 })
@@ -312,52 +287,217 @@ export default function Projects() {
             </div>
           </>
         )}
+      </div>
 
-        {/* Add/Edit Modal */}
-        {modal && (
-          <Modal title={editId ? "Edit Project" : "Add Project"} onClose={closeModal} size="lg">
-            <ProjectForm form={form} setForm={setForm} onSave={save} onCancel={closeModal} saving={saving} err={err} />
-          </Modal>
-        )}
+      {/* Modals */}
+      {modal && (
+        <ActionModal
+          title={modal.editId ? "Edit Project" : "Add Project"}
+          subtitle={modal.editId ? "Update project details" : "Add a new project for voting"}
+          size="lg"
+          saving={saving}
+          onClose={closeModal}
+          footer={
+            <>
+              <GhostBtn onClick={closeModal} disabled={saving}>Cancel</GhostBtn>
+              <GoldBtn onClick={save} disabled={saving}>
+                {saving ? "Saving…" : modal.editId ? "Update Project" : "Add Project"}
+              </GoldBtn>
+            </>
+          }
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Project name" required full>
+              <input
+                className="input"
+                value={modal.form.name}
+                onChange={e => setField("name", e.target.value)}
+                placeholder="Smart Water Monitoring System"
+              />
+            </Field>
+            <Field label="Team / Author">
+              <input
+                className="input"
+                value={modal.form.team}
+                onChange={e => setField("team", e.target.value)}
+                placeholder="Team Innovate"
+              />
+            </Field>
+            <Field label="Category">
+              <select
+                className="input"
+                value={modal.form.category}
+                onChange={e => setField("category", e.target.value)}
+              >
+                {CATEGORIES.map(c => (
+                  <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Image URL" full>
+              <input
+                className="input"
+                value={modal.form.image_url}
+                onChange={e => setField("image_url", e.target.value)}
+                placeholder="https://…"
+              />
+            </Field>
+            <Field label="Description" full>
+              <textarea
+                className="input"
+                value={modal.form.description}
+                onChange={e => setField("description", e.target.value)}
+                rows={4}
+                placeholder="Describe the project…"
+              />
+            </Field>
+            <Field label="Display order">
+              <input
+                type="number"
+                className="input"
+                value={modal.form.display_order}
+                onChange={e => setField("display_order", Number(e.target.value) || 0)}
+                min={0}
+              />
+            </Field>
+          </div>
+        </ActionModal>
+      )}
 
-        {/* Delete Confirmation */}
-        {deleteConfirm && (
-          <div className="modal-overlay">
-            <div className="modal" style={{ maxWidth: 420 }}>
-              <div style={{ padding: 24 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Delete Project?</div>
-                <div style={{ fontSize: 14, color: "#718096" }}>Remove <strong>{deleteConfirm.name}</strong> and all its votes?</div>
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-                  <button className="btn-ghost" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-                  <button style={{ background: "#e53e3e", color: "white", border: "none", padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 500 }} onClick={() => doDelete(deleteConfirm.id)}>Delete</button>
-                </div>
-              </div>
+      <ConfirmModal
+        open={!!deleteConfirm}
+        tone="danger"
+        title="Delete project"
+        message={deleteConfirm ? `Remove ${deleteConfirm.name}? All of its votes will also be deleted.` : ""}
+        confirmLabel="Delete Project"
+        loading={deleting}
+        onCancel={() => !deleting && setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+      />
+
+      <ConfirmModal
+        open={toggleVotingConfirm}
+        tone={votingOpen ? "warning" : "info"}
+        title={votingOpen ? "Close voting" : "Open voting"}
+        message={votingOpen
+          ? "Delegates will no longer be able to cast votes. Any votes already cast are preserved."
+          : "Delegates will be able to cast their vote from the mobile app."}
+        confirmLabel={votingOpen ? "Close voting" : "Open voting"}
+        onCancel={() => setToggleVotingConfirm(false)}
+        onConfirm={toggleVoting}
+      />
+
+      {voterModal && (
+        <ActionModal
+          title="Voter Details"
+          subtitle={`${voters.length} delegate${voters.length !== 1 ? "s" : ""}`}
+          onClose={() => { setVoterModal(null); setVoters([]); }}
+          footer={
+            <GhostBtn onClick={() => { setVoterModal(null); setVoters([]); }}>Close</GhostBtn>
+          }
+        >
+          {voters.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 24, color: "#94a3b8", fontSize: 13 }}>
+              No votes for this project yet
             </div>
+          ) : (
+            <div>
+              {voters.map(v => (
+                <div key={v.id} style={{
+                  display: "flex", justifyContent: "space-between",
+                  padding: "10px 0", borderBottom: "1px solid #f1f5f9",
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{v.name}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                      {v.organization && `${v.organization} · `}{v.email}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                    {new Date(v.voted_at).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ActionModal>
+      )}
+    </Layout>
+  );
+}
+
+/* ───────── Project Card ───────── */
+function ProjectCard({ project, onEdit, onDelete }) {
+  const cs = CAT_STYLES[project.category] || CAT_STYLES.other;
+  return (
+    <div
+      className="card"
+      style={{
+        padding: 0, overflow: "hidden",
+        display: "flex", flexDirection: "column",
+        transition: "all 0.12s",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = "0 6px 18px -6px rgba(15,45,94,0.15)";
+        e.currentTarget.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = "";
+        e.currentTarget.style.transform = "";
+      }}
+    >
+      {/* Image / placeholder */}
+      <div style={{
+        height: 140, background: `linear-gradient(135deg, ${cs.bg}, white)`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        borderBottom: "1px solid #f1f5f9", position: "relative",
+      }}>
+        {project.image_url ? (
+          <img
+            src={project.image_url} alt={project.name}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            onError={(e) => { e.target.style.display = "none"; }}
+          />
+        ) : (
+          <ImageIcon size={36} color={cs.color} style={{ opacity: 0.45 }} />
+        )}
+        <div style={{ position: "absolute", top: 10, left: 10 }}>
+          <Chip label={project.category || "other"} color={cs.color} bg="white" border={cs.border} small uppercase />
+        </div>
+      </div>
+
+      <div style={{ padding: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: "#0f172a" }}>{project.name}</div>
+            {project.team && (
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{project.team}</div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+            <IconBtn Icon={Pencil} color="#7c3aed" bg="#f5f3ff" title="Edit" onClick={onEdit} />
+            <IconBtn Icon={Trash2} color="#dc2626" bg="#fff5f5" title="Remove" onClick={onDelete} />
+          </div>
+        </div>
+
+        {project.description && (
+          <div style={{
+            fontSize: 12, color: "#64748b", marginTop: 8, lineHeight: 1.5,
+            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>
+            {project.description}
           </div>
         )}
 
-        {/* Voter Detail Modal */}
-        {voterModal && (
-          <Modal title="Voter Details" onClose={() => { setVoterModal(null); setVoters([]); }} size="md">
-            {voters.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 24, color: "#a0aec0", fontSize: 13 }}>No votes for this project yet</div>
-            ) : (
-              <div>
-                <div style={{ fontSize: 12, color: "#a0aec0", marginBottom: 12 }}>{voters.length} voter{voters.length !== 1 ? "s" : ""}</div>
-                {voters.map(v => (
-                  <div key={v.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f0f4f8" }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1a202c" }}>{v.name}</div>
-                      <div style={{ fontSize: 11, color: "#718096" }}>{v.organization} · {v.email}</div>
-                    </div>
-                    <div style={{ fontSize: 11, color: "#a0aec0" }}>{new Date(v.voted_at).toLocaleDateString()}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Modal>
-        )}
+        <div style={{
+          marginTop: 10, paddingTop: 10, borderTop: "1px solid #f1f5f9",
+          display: "flex", alignItems: "center", gap: 6,
+          fontSize: 12, color: "#64748b",
+        }}>
+          <Users size={12} />
+          <span><strong style={{ color: "#0f172a" }}>{project.vote_count ?? 0}</strong> vote{(project.vote_count ?? 0) !== 1 ? "s" : ""}</span>
+        </div>
       </div>
-    </Layout>
+    </div>
   );
 }

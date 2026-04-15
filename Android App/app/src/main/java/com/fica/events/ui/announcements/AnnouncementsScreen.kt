@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +25,9 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.LocalBar
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -127,23 +131,23 @@ fun AnnouncementsScreen() {
             .fillMaxSize()
             .background(FICABg),
     ) {
-        // ── Header ───────────────────────────────────────────────────────
+        // ── Header ─ matches Agenda/Networking/Profile titles ──────────
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .background(FICABg),
         ) {
             Text(
                 text = "Updates",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = FICAText,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 20.dp, bottom = 16.dp),
+                    .padding(top = 14.dp, bottom = 12.dp),
                 textAlign = TextAlign.Center,
             )
-            HorizontalDivider(color = FICABorder, thickness = 0.5.dp)
         }
 
         // ── Content ──────────────────────────────────────────────────────
@@ -159,7 +163,7 @@ fun AnnouncementsScreen() {
                 LoadingView(message = "Loading updates...")
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 140.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 120.dp),
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
@@ -167,18 +171,18 @@ fun AnnouncementsScreen() {
                     if (networkingEvents.isNotEmpty()) {
                         item {
                             SectionHeader(title = "Networking Events")
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                         }
                         items(networkingEvents, key = { it.id }) { event ->
                             NetworkingEventCard(event = event)
                         }
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item { Spacer(modifier = Modifier.height(10.dp)) }
                     }
 
                     // ── Announcements ─────────────────────────────────────
                     item {
                         SectionHeader(title = "Announcements")
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
 
                     if (publishedAnnouncements.isEmpty()) {
@@ -204,108 +208,171 @@ fun AnnouncementsScreen() {
 
 @Composable
 private fun NetworkingEventCard(event: NetworkingEvent) {
+    // Compact, iOS-style: single line title + one row of inline icons + compact capacity
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 5.dp)
-            .shadow(3.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.05f))
-            .clip(RoundedCornerShape(16.dp))
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .clip(RoundedCornerShape(14.dp))
             .background(FICACard)
-            .padding(18.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Event type icon
-        EventTypeIcon(type = event.type, size = 44)
+        // Event type icon — colored per type (wine glass for cocktails, plate for dinners, etc.)
+        EventTypeIcon(type = event.type, title = event.title, size = 40)
 
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
-        // Event details
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        // Event details — compact
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
             Text(
                 event.title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = FICAText,
-                maxLines = 2,
+                lineHeight = 17.sp,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
 
+            // Inline row: date · time (both on one line, compact chips)
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (!event.slot_date.isNullOrBlank()) {
-                    InfoChip(icon = Icons.Filled.CalendarMonth, text = event.slot_date)
+                    CompactChip(icon = Icons.Filled.CalendarMonth, text = shortDate(event.slot_date))
                 }
                 if (!event.start_time.isNullOrBlank()) {
                     val timeText = event.start_time +
                         if (!event.end_time.isNullOrBlank()) " – ${event.end_time}" else ""
-                    InfoChip(icon = Icons.Filled.Schedule, text = timeText)
+                    CompactChip(icon = Icons.Filled.Schedule, text = timeText)
                 }
             }
 
+            // Location on its own line (small pin + muted text)
             if (!event.location.isNullOrBlank()) {
-                InfoChip(icon = Icons.Filled.LocationOn, text = event.location)
-            }
-
-            if (!event.dress_code.isNullOrBlank()) {
-                Text(
-                    text = event.dress_code,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = FICAGold,
-                    modifier = Modifier
-                        .background(FICAGold.copy(alpha = 0.1f), RoundedCornerShape(50))
-                        .padding(horizontal = 10.dp, vertical = 3.dp),
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.LocationOn,
+                        contentDescription = null,
+                        tint = FICAMuted,
+                        modifier = Modifier.size(11.dp),
+                    )
+                    Text(
+                        text = event.location,
+                        fontSize = 11.sp,
+                        color = FICAMuted,
+                        lineHeight = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 
-        // Capacity
+        // Compact capacity — just icon + number stacked, no bg
         if (event.capacity != null) {
             Spacer(modifier = Modifier.width(8.dp))
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .background(FICABg, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
                     Icons.Filled.Groups,
                     contentDescription = null,
                     tint = FICAMuted,
                     modifier = Modifier.size(14.dp),
                 )
-                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     "${event.capacity}",
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = FICASecondary,
+                    color = FICAMuted,
+                    lineHeight = 12.sp,
                 )
             }
         }
     }
 }
 
-// ── Event Type Icon ──────────────────────────────────────────────────────────
+// Convert ISO date ("2026-05-08") → display format ("8 May")
+private fun shortDate(iso: String): String {
+    return try {
+        val parts = iso.split("-")
+        val day = parts[2].toIntOrNull() ?: return iso
+        val monthIdx = (parts[1].toIntOrNull() ?: return iso) - 1
+        val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        "$day ${months[monthIdx]}"
+    } catch (_: Exception) {
+        iso
+    }
+}
+
+// Small inline chip used inside NetworkingEventCard (icon + text, no bg)
+@Composable
+private fun CompactChip(
+    icon: ImageVector,
+    text: String,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = FICASecondary,
+            modifier = Modifier.size(11.dp),
+        )
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = FICASecondary,
+            lineHeight = 13.sp,
+        )
+    }
+}
+
+// ── Event Type Icon (different icons + colors per event type, iOS-style) ─────
 
 @Composable
-private fun EventTypeIcon(type: String?, size: Int) {
-    val color = SessionTypeColors.colorFor(type)
-    val icon: ImageVector = when (type?.lowercase()) {
-        "networking" -> Icons.Filled.Groups
-        "social" -> Icons.Filled.Groups
-        "dinner" -> Icons.Filled.Groups
-        else -> Icons.Filled.CalendarMonth
+private fun EventTypeIcon(type: String?, title: String?, size: Int) {
+    // Detect from type first, fall back to title keywords
+    val key = when {
+        type?.lowercase() == "cocktail" -> "cocktail"
+        type?.lowercase() == "dinner" -> "dinner"
+        type?.lowercase() == "gala" -> "gala"
+        title?.lowercase()?.contains("cocktail") == true -> "cocktail"
+        title?.lowercase()?.contains("dinner") == true -> "dinner"
+        else -> "default"
     }
+
+    val icon: ImageVector = when (key) {
+        "cocktail" -> Icons.Filled.LocalBar         // wine glass
+        "dinner" -> Icons.Filled.Restaurant         // fork + knife
+        "gala" -> Icons.Filled.Celebration          // party/champagne
+        else -> Icons.Filled.Groups
+    }
+    val color = when (key) {
+        "cocktail" -> Color(0xFF9333EA)             // vivid purple
+        "dinner" -> Color(0xFF059669)               // emerald green
+        "gala" -> Color(0xFFC9A84C)                 // FICA gold
+        else -> FICANavy
+    }
+
     Box(
         modifier = Modifier
             .size(size.dp)
             .background(color.copy(alpha = 0.12f), RoundedCornerShape((size * 0.28f).dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size((size * 0.45f).dp))
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size((size * 0.50f).dp))
     }
 }
 
@@ -334,10 +401,10 @@ private fun AnnouncementCard(announcement: Announcement) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 5.dp)
-            .shadow(3.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.05f))
-            .clip(RoundedCornerShape(16.dp))
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .clip(RoundedCornerShape(14.dp))
             .background(FICACard)
-            .padding(18.dp),
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Header row: icon + title/meta
@@ -363,7 +430,7 @@ private fun AnnouncementCard(announcement: Announcement) {
             // Title + meta
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 // Title row with optional URGENT badge
                 Row(
@@ -372,9 +439,10 @@ private fun AnnouncementCard(announcement: Announcement) {
                 ) {
                     Text(
                         announcement.title,
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = FICAText,
+                        lineHeight = 18.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
@@ -398,6 +466,7 @@ private fun AnnouncementCard(announcement: Announcement) {
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     color = FICAMuted,
+                    lineHeight = 13.sp,
                 )
             }
         }
@@ -406,7 +475,7 @@ private fun AnnouncementCard(announcement: Announcement) {
         if (!announcement.body.isNullOrBlank()) {
             Text(
                 announcement.body,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = FICASecondary,
                 lineHeight = 19.sp,
             )

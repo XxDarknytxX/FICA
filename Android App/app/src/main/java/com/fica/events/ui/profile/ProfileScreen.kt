@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,7 +50,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -110,71 +115,102 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
             .background(FICABg)
             .verticalScroll(rememberScrollState()),
     ) {
-        // ── Hero header ────────────────────────────────────────────────────
+        // ── Title bar (extra top padding lets the sheet handle breathe) ───
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(FICAHeroGradient)
-                .padding(top = 40.dp, bottom = 20.dp),
+                .padding(top = 6.dp, bottom = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Profile",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = FICAText,
+            )
+        }
+
+        // ── Hero: navy band positioned BEHIND the name content ───────────
+        // Avatar top half sits on white bg; bottom half + name/title/org/badges sit on navy.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    // Navy gradient rectangle — starts at avatar's vertical center
+                    // (48.dp = half of 96dp avatar), extends to bottom of content
+                    val bandStart = 48.dp.toPx()
+                    drawRect(
+                        brush = FICAHeroGradient,
+                        topLeft = Offset(0f, bandStart),
+                        size = Size(size.width, size.height - bandStart),
+                    )
+                },
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.padding(bottom = 24.dp),
+            ) {
                 AvatarView(
                     name = user?.name ?: "User",
                     photoUrl = user?.photo_url,
-                    size = 86.dp,
+                    size = 96.dp,
                     borderColor = FICAGold,
                     borderWidth = 3.dp,
                 )
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = user?.name ?: "Delegate",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
+                    lineHeight = 26.sp,
                 )
                 if (!user?.job_title.isNullOrBlank()) {
                     Text(
                         text = user?.job_title ?: "",
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = Color.White.copy(alpha = 0.75f),
+                        lineHeight = 17.sp,
                     )
                 }
                 if (!user?.organization.isNullOrBlank()) {
                     Text(
                         text = user?.organization ?: "",
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = FICAGold,
+                        lineHeight = 17.sp,
                     )
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TicketBadgeView(ticketType = user?.ticket_type)
                     if (!user?.registration_code.isNullOrBlank()) {
                         Row(
                             modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(50))
+                                .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             Icon(
                                 Icons.Filled.Star,
                                 contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.size(10.dp),
+                                tint = FICAGold,
+                                modifier = Modifier.size(11.dp),
                             )
                             Text(
                                 text = user?.registration_code ?: "",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
-                                color = Color.White.copy(alpha = 0.8f),
+                                color = Color.White,
                             )
                         }
                     }
@@ -187,7 +223,7 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
             modifier = Modifier
                 .padding(horizontal = 20.dp)
                 .padding(top = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // ── Stats Row (matches iOS: 3 items with check-in) ────────────
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -218,7 +254,7 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+                    .shadow(2.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
                     .background(FICACard, RoundedCornerShape(16.dp)),
             ) {
                 CardRow(icon = Icons.Filled.Email, label = "Email", value = user?.email ?: "—", color = FICANavy)
@@ -256,29 +292,19 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Icon(
-                                Icons.Filled.Star,
-                                contentDescription = null,
-                                tint = FICAGold,
-                                modifier = Modifier.size(12.dp),
-                            )
-                            Text(
-                                "Bio",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = FICAMuted,
-                            )
-                        }
+                        Text(
+                            "BIO",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = FICAMuted,
+                            letterSpacing = 0.5.sp,
+                            lineHeight = 12.sp,
+                        )
                         Text(
                             text = user?.bio ?: "",
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
                             color = FICASecondary,
-                            lineHeight = 18.sp,
-                            modifier = Modifier.padding(start = 20.dp),
+                            lineHeight = 20.sp,
                         )
                     }
                 }
@@ -288,20 +314,20 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+                    .shadow(2.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
                     .background(FICACard, RoundedCornerShape(16.dp)),
             ) {
-                // Header
-                Row(
+                // Header — iOS-style uppercase tracked label
+                Text(
+                    "ACTIVITY",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = FICAMuted,
+                    letterSpacing = 0.6.sp,
                     modifier = Modifier
                         .padding(horizontal = 16.dp)
-                        .padding(top = 16.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(Icons.Filled.Star, contentDescription = null, tint = FICAGold, modifier = Modifier.size(12.dp))
-                    Text("Activity", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = FICAText)
-                }
+                        .padding(top = 14.dp, bottom = 6.dp),
+                )
 
                 if (pendingCount > 0) {
                     ActivityItem(
@@ -332,47 +358,60 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+                    .shadow(2.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
                     .background(FICACard, RoundedCornerShape(16.dp)),
             ) {
-                // Header
-                Row(
+                Text(
+                    "PREFERENCES",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = FICAMuted,
+                    letterSpacing = 0.6.sp,
                     modifier = Modifier
                         .padding(horizontal = 16.dp)
-                        .padding(top = 16.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(Icons.Filled.Settings, contentDescription = null, tint = FICAMuted, modifier = Modifier.size(12.dp))
-                    Text("Preferences", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = FICAText)
-                }
+                        .padding(top = 14.dp, bottom = 6.dp),
+                )
 
                 Row(
                     modifier = Modifier
                         .padding(horizontal = 16.dp)
-                        .padding(bottom = 12.dp),
+                        .padding(top = 6.dp, bottom = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
-                            .background(FICANavy.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                            .size(40.dp)
+                            .background(
+                                if (isDarkMode) Color(0xFF6366F1).copy(alpha = 0.1f)
+                                else Color(0xFFF97316).copy(alpha = 0.1f),
+                                RoundedCornerShape(10.dp),
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             if (isDarkMode) Icons.Filled.DarkMode else Icons.Filled.LightMode,
                             contentDescription = null,
                             tint = if (isDarkMode) Color(0xFF6366F1) else Color(0xFFF97316),
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Appearance", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = FICAText)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ) {
+                        Text(
+                            "Appearance",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = FICAText,
+                            lineHeight = 16.sp,
+                        )
                         Text(
                             if (isDarkMode) "Dark Mode" else "Light Mode",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = FICAMuted,
+                            lineHeight = 14.sp,
                         )
                     }
                     Switch(
@@ -387,7 +426,7 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+                    .shadow(2.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
                     .background(FICACard, RoundedCornerShape(16.dp))
                     .clickable { showLogoutDialog = true }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -395,16 +434,32 @@ fun ProfileScreen(onLogout: (() -> Unit)? = null) {
             ) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .background(FICADanger.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                        .size(40.dp)
+                        .background(FICADanger.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = FICADanger, modifier = Modifier.size(13.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = null,
+                        tint = FICADanger,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("Sign Out", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = FICADanger)
+                Text(
+                    "Sign Out",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = FICADanger,
+                    lineHeight = 17.sp,
+                )
                 Spacer(modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FICABorder, modifier = Modifier.size(10.dp))
+                Icon(
+                    Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = FICAMuted,
+                    modifier = Modifier.size(16.dp),
+                )
             }
 
             // ── Footer ────────────────────────────────────────────────────
@@ -457,22 +512,40 @@ private fun StatPill(
 ) {
     Column(
         modifier = modifier
-            .shadow(6.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
+            .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.04f))
             .background(FICACard, RoundedCornerShape(14.dp))
-            .padding(vertical = 16.dp),
+            .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // iOS-style: icon sits inside a soft muted circle (tinted by the accent color)
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .background(color.copy(alpha = 0.1f), CircleShape),
+                .size(38.dp)
+                .background(color.copy(alpha = 0.12f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(15.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(20.dp),
+            )
         }
-        Text(value, fontSize = 17.sp, fontWeight = FontWeight.Black, color = FICAText)
-        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = FICAMuted)
+        Text(
+            value,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+            color = FICAText,
+            lineHeight = 26.sp,
+        )
+        Text(
+            label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = FICAMuted,
+            lineHeight = 13.sp,
+        )
     }
 }
 
@@ -492,15 +565,27 @@ private fun ActivityItem(
     ) {
         Box(
             modifier = Modifier
-                .size(32.dp)
-                .background(color.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                .size(40.dp)
+                .background(color.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Text(text, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = FICAText, modifier = Modifier.weight(1f))
-        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FICABorder, modifier = Modifier.size(10.dp))
+        Text(
+            text,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = FICAText,
+            lineHeight = 16.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = FICAMuted,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
@@ -520,27 +605,29 @@ private fun CardRow(
     ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
-                .background(color.copy(alpha = 0.1f), RoundedCornerShape(7.dp)),
+                .size(40.dp)
+                .background(color.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 label.uppercase(),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = FICAMuted,
-                letterSpacing = 0.3.sp,
+                letterSpacing = 0.5.sp,
+                lineHeight = 12.sp,
             )
             Text(
                 value,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = if (monospaced) FontWeight.SemiBold else FontWeight.Medium,
                 fontFamily = if (monospaced) FontFamily.Monospace else FontFamily.Default,
                 color = FICAText,
+                lineHeight = 16.sp,
                 maxLines = 1,
             )
         }
@@ -552,6 +639,6 @@ private fun CardDivider() {
     HorizontalDivider(
         color = FICABorder,
         thickness = 0.5.dp,
-        modifier = Modifier.padding(start = 56.dp),
+        modifier = Modifier.padding(start = 68.dp),
     )
 }
