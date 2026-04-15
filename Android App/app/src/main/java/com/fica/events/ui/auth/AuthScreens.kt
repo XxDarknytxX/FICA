@@ -18,12 +18,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -53,12 +56,17 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -253,6 +261,42 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var showPassword by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    val submitLogin: () -> Unit = submit@{
+        if (email.isBlank() || password.isBlank()) {
+            error = "Please enter both email and password"
+            return@submit
+        }
+        keyboardController?.hide()
+        focusManager.clearFocus()
+        isLoading = true
+        error = null
+        scope.launch {
+            try {
+                val response = ApiClient.service.login(
+                    LoginRequest(email.trim(), password)
+                )
+                if (response.isSuccessful) {
+                    val body = response.body() ?: throw Exception("Empty response")
+                    AuthManager.login(body.token, body.attendee)
+                    ApiClient.updateToken(body.token)
+                    onLoginSuccess()
+                } else {
+                    error = when (response.code()) {
+                        401 -> "Invalid email or password"
+                        404 -> "Account not found"
+                        else -> "Login failed (${response.code()})"
+                    }
+                }
+            } catch (e: Exception) {
+                error = e.message ?: "An unexpected error occurred"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
 
     var formVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { formVisible = true }
@@ -350,6 +394,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 24.dp)
                 .alpha(formAlpha)
                 .offset(y = formOffset.dp),
@@ -460,6 +505,13 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next,
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                        ),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = FICAGold,
                             unfocusedBorderColor = Color.Transparent,
@@ -492,6 +544,13 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { submitLogin() },
+                        ),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = FICAGold,
                             unfocusedBorderColor = Color.Transparent,
@@ -504,38 +563,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
                     // Sign In button
                     Button(
-                        onClick = {
-                            if (email.isBlank() || password.isBlank()) {
-                                error = "Please enter both email and password"
-                                return@Button
-                            }
-                            isLoading = true
-                            error = null
-                            scope.launch {
-                                try {
-                                    val response = ApiClient.service.login(
-                                        LoginRequest(email.trim(), password)
-                                    )
-                                    if (response.isSuccessful) {
-                                        val body = response.body()
-                                            ?: throw Exception("Empty response")
-                                        AuthManager.login(body.token, body.attendee)
-                                        ApiClient.updateToken(body.token)
-                                        onLoginSuccess()
-                                    } else {
-                                        error = when (response.code()) {
-                                            401 -> "Invalid email or password"
-                                            404 -> "Account not found"
-                                            else -> "Login failed (${response.code()})"
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    error = e.message ?: "An unexpected error occurred"
-                                } finally {
-                                    isLoading = false
-                                }
-                            }
-                        },
+                        onClick = { submitLogin() },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
