@@ -62,6 +62,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -903,20 +905,32 @@ private fun SponsorCard(sponsor: Sponsor) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Logo placeholder — bigger rounded square with abbreviation (iOS style)
+        // Logo slot — real logo via Coil when logo_url is set, 2-letter
+        // initials fallback for empty/null URLs. Mirrors SponsorsScreen so
+        // the home-screen card and the full sponsors page render the same
+        // way; previously the home card only ever showed the placeholder.
         Box(
             modifier = Modifier
                 .size(width = 72.dp, height = 56.dp)
                 .background(FICAInputBg, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = sponsor.name.take(2).uppercase(),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Black,
-                color = FICANavy,
-                lineHeight = 24.sp,
-            )
+            if (!sponsor.logo_url.isNullOrBlank()) {
+                AsyncImage(
+                    model = sponsor.logo_url,
+                    contentDescription = sponsor.name,
+                    modifier = Modifier.fillMaxSize().padding(6.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                Text(
+                    text = sponsor.name.take(2).uppercase(),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    color = FICANavy,
+                    lineHeight = 24.sp,
+                )
+            }
         }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
