@@ -16,7 +16,9 @@ struct NetworkingView: View {
                 tabBar
                 Divider()
 
-                // Only render the active tab
+                // Only render the active tab. The content swap must be instant —
+                // any lingering animation makes the new view's VStack briefly land
+                // mid-screen (content shorter than container) before snapping up.
                 Group {
                     switch selectedTab {
                     case 0: DirectoryView()
@@ -26,7 +28,10 @@ struct NetworkingView: View {
                     default: DirectoryView()
                     }
                 }
-                .animation(nil, value: selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // Nuke any inherited animation on the view swap (belt-and-braces
+                // against any withAnimation callers upstream).
+                .transaction { $0.animation = nil }
             }
             .background(Color.ficaBg)
             .navigationBarTitleDisplayMode(.inline)
@@ -44,7 +49,9 @@ struct NetworkingView: View {
         HStack(spacing: 4) {
             ForEach(Array(tabs.enumerated()), id: \.offset) { idx, tab in
                 Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { selectedTab = idx }
+                    // Instant swap. The pill-highlight animation below is scoped
+                    // via .animation(_:value:) so it doesn't leak into the content.
+                    selectedTab = idx
                 } label: {
                     VStack(spacing: 5) {
                         Image(systemName: tab.0)
@@ -61,7 +68,10 @@ struct NetworkingView: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(selectedTab == idx ? Color.ficaNavy.opacity(0.06) : .clear)
                     )
+                    // Animate only the pill tint + weight change, nothing else.
+                    .animation(.easeInOut(duration: 0.18), value: selectedTab)
                 }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 12)
