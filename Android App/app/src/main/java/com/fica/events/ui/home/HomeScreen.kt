@@ -961,13 +961,14 @@ private fun SponsorCard(sponsor: Sponsor, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Logo slot — full card width, 42dp tall so the card reads as a
-        // horizontal rectangle. Logo loaded via Coil when logo_url is set,
-        // 2-letter initials as fallback otherwise.
+        // Logo slot — full card width, 52dp tall so the logo has enough
+        // vertical room to read at a glance while the card still reads as
+        // a horizontal rectangle. Logo loaded via Coil when logo_url is
+        // set, 2-letter initials as fallback otherwise.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(42.dp)
+                .height(52.dp)
                 .background(FICAInputBg, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
         ) {
