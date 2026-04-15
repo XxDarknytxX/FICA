@@ -63,13 +63,31 @@ struct SponsorsView: View {
 
     private func sponsorCard(_ sp: Sponsor, tier: String) -> some View {
         HStack(spacing: 14) {
+            // Logo slot — renders the real logo via AsyncImage when logo_url
+            // is present, falling back to the 2-letter initials placeholder
+            // while loading or when no URL is set.
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.ficaInputBg)
                 .frame(width: 56, height: 42)
                 .overlay(
-                    Text(String(sp.name.prefix(2)).uppercased())
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.ficaNavy)
+                    Group {
+                        if let urlStr = sp.logo_url, let url = URL(string: urlStr) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image.resizable().scaledToFit().padding(6)
+                                default:
+                                    Text(String(sp.name.prefix(2)).uppercased())
+                                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                                        .foregroundStyle(Color.ficaNavy)
+                                }
+                            }
+                        } else {
+                            Text(String(sp.name.prefix(2)).uppercased())
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .foregroundStyle(Color.ficaNavy)
+                        }
+                    }
                 )
             VStack(alignment: .leading, spacing: 3) {
                 Text(sp.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.ficaText)

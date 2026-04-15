@@ -110,16 +110,16 @@ async function seed() {
   // data consistent with 2026.
   await pool.query(`
     INSERT INTO sponsors (name, logo_url, website, tier, description, contact_name, contact_email, display_order, congress_year) VALUES
-    ('Vodafone Fiji', '/sponsors/vodafone.png', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a Platinum Major Sponsor, providing digital connectivity and innovation across Fiji.', NULL, NULL, 1, 2025),
-    ('Asco Motors', '/sponsors/asco-motors.png', 'https://www.toyota-fiji.com', 'platinum', 'Asco Motors is a Platinum Major Sponsor and leading automotive distributor in Fiji — "Let''s Go with Asco!".', NULL, NULL, 2, 2025),
-    ('Extra Supermarket', '/sponsors/extra.png', 'https://extra.com.fj', 'gold', 'Extra Supermarket is the Gold Sponsor — a proudly Fijian-owned retail business.', NULL, NULL, 1, 2025),
-    ('Merchant Finance', '/sponsors/merchant-finance.png', 'https://merchantfinance.com.fj', 'bronze', 'Merchant Finance is a Bronze Sponsor and Fiji''s largest non-bank licensed credit institution.', NULL, NULL, 1, 2025),
-    ('Marsh', '/sponsors/marsh.png', 'https://www.marsh.com', 'bronze', 'Marsh is a Bronze Sponsor — a global leader in risk, reinsurance, and consulting.', NULL, NULL, 2, 2025),
-    ('Motibhai Group', '/sponsors/motibhai.png', 'https://www.motibhai.com', 'supporter', 'Motibhai Group is a Support Sponsor — a diversified Fijian corporate group established in 1931.', NULL, NULL, 1, 2025),
-    ('Chartered Accountants ANZ', '/sponsors/ca-anz.png', 'https://www.charteredaccountantsanz.com', 'supporter', 'CA ANZ is a Support Sponsor representing over 120,000 chartered accountants across Australia and New Zealand.', NULL, NULL, 2, 2025),
-    ('Datec Fiji', '/sponsors/datec.png', 'https://datec.com.fj', 'supporter', 'Datec is a Support Sponsor providing complete IT and E-Business solutions to Fiji and the South Pacific.', NULL, NULL, 3, 2025),
-    ('Fiji Airways', '/sponsors/fiji-airways.png', 'https://www.fijiairways.com', 'supporter', 'Fiji Airways is a Support Sponsor and the Official Airline Partner of FICA Congress.', NULL, NULL, 4, 2025),
-    ('The Fiji Times', '/sponsors/fiji-times.png', 'https://www.fijitimes.com.fj', 'media', 'The Fiji Times is the Official Media Partner of FICA Congress.', NULL, NULL, 1, 2025)
+    ('Vodafone Fiji', 'https://eventsfiji.cloud/sponsors/vodafone.png', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a Platinum Major Sponsor, providing digital connectivity and innovation across Fiji.', NULL, NULL, 1, 2025),
+    ('Asco Motors', 'https://eventsfiji.cloud/sponsors/asco-motors.png', 'https://www.toyota-fiji.com', 'platinum', 'Asco Motors is a Platinum Major Sponsor and leading automotive distributor in Fiji — "Let''s Go with Asco!".', NULL, NULL, 2, 2025),
+    ('Extra Supermarket', 'https://eventsfiji.cloud/sponsors/extra.png', 'https://extra.com.fj', 'gold', 'Extra Supermarket is the Gold Sponsor — a proudly Fijian-owned retail business.', NULL, NULL, 1, 2025),
+    ('Merchant Finance', 'https://eventsfiji.cloud/sponsors/merchant-finance.png', 'https://merchantfinance.com.fj', 'bronze', 'Merchant Finance is a Bronze Sponsor and Fiji''s largest non-bank licensed credit institution.', NULL, NULL, 1, 2025),
+    ('Marsh', 'https://eventsfiji.cloud/sponsors/marsh.png', 'https://www.marsh.com', 'bronze', 'Marsh is a Bronze Sponsor — a global leader in risk, reinsurance, and consulting.', NULL, NULL, 2, 2025),
+    ('Motibhai Group', 'https://eventsfiji.cloud/sponsors/motibhai.png', 'https://www.motibhai.com', 'supporter', 'Motibhai Group is a Support Sponsor — a diversified Fijian corporate group established in 1931.', NULL, NULL, 1, 2025),
+    ('Chartered Accountants ANZ', 'https://eventsfiji.cloud/sponsors/ca-anz.png', 'https://www.charteredaccountantsanz.com', 'supporter', 'CA ANZ is a Support Sponsor representing over 120,000 chartered accountants across Australia and New Zealand.', NULL, NULL, 2, 2025),
+    ('Datec Fiji', 'https://eventsfiji.cloud/sponsors/datec.png', 'https://datec.com.fj', 'supporter', 'Datec is a Support Sponsor providing complete IT and E-Business solutions to Fiji and the South Pacific.', NULL, NULL, 3, 2025),
+    ('Fiji Airways', 'https://eventsfiji.cloud/sponsors/fiji-airways.png', 'https://www.fijiairways.com', 'supporter', 'Fiji Airways is a Support Sponsor and the Official Airline Partner of FICA Congress.', NULL, NULL, 4, 2025),
+    ('The Fiji Times', 'https://eventsfiji.cloud/sponsors/fiji-times.png', 'https://www.fijitimes.com.fj', 'media', 'The Fiji Times is the Official Media Partner of FICA Congress.', NULL, NULL, 1, 2025)
   `);
   console.log("✓ 10 sponsors seeded (Congress 2025)");
 
@@ -215,16 +215,16 @@ async function seed() {
   // programme: Platinum Major → Gold → Bronze → Support → Media Partner.
   await pool.query(`
     INSERT INTO sponsors (name, logo_url, website, tier, description, contact_name, contact_email, display_order, congress_year) VALUES
-    ('Vodafone Fiji', '/sponsors/vodafone.png', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a Platinum Major Sponsor, providing digital connectivity and innovation across Fiji.', NULL, NULL, 1, 2026),
-    ('Asco Motors', '/sponsors/asco-motors.png', 'https://www.toyota-fiji.com', 'platinum', 'Asco Motors is a Platinum Major Sponsor and leading automotive distributor in Fiji — "Let''s Go with Asco!".', NULL, NULL, 2, 2026),
-    ('Extra Supermarket', '/sponsors/extra.png', 'https://extra.com.fj', 'gold', 'Extra Supermarket is the Gold Sponsor — a proudly Fijian-owned retail business.', NULL, NULL, 1, 2026),
-    ('Merchant Finance', '/sponsors/merchant-finance.png', 'https://merchantfinance.com.fj', 'bronze', 'Merchant Finance is a Bronze Sponsor and Fiji''s largest non-bank licensed credit institution.', NULL, NULL, 1, 2026),
-    ('Marsh', '/sponsors/marsh.png', 'https://www.marsh.com', 'bronze', 'Marsh is a Bronze Sponsor — a global leader in risk, reinsurance, and consulting.', NULL, NULL, 2, 2026),
-    ('Motibhai Group', '/sponsors/motibhai.png', 'https://www.motibhai.com', 'supporter', 'Motibhai Group is a Support Sponsor — a diversified Fijian corporate group established in 1931.', NULL, NULL, 1, 2026),
-    ('Chartered Accountants ANZ', '/sponsors/ca-anz.png', 'https://www.charteredaccountantsanz.com', 'supporter', 'CA ANZ is a Support Sponsor representing over 120,000 chartered accountants across Australia and New Zealand.', NULL, NULL, 2, 2026),
-    ('Datec Fiji', '/sponsors/datec.png', 'https://datec.com.fj', 'supporter', 'Datec is a Support Sponsor providing complete IT and E-Business solutions to Fiji and the South Pacific.', NULL, NULL, 3, 2026),
-    ('Fiji Airways', '/sponsors/fiji-airways.png', 'https://www.fijiairways.com', 'supporter', 'Fiji Airways is a Support Sponsor and the Official Airline Partner of FICA Congress.', NULL, NULL, 4, 2026),
-    ('The Fiji Times', '/sponsors/fiji-times.png', 'https://www.fijitimes.com.fj', 'media', 'The Fiji Times is the Official Media Partner of FICA Congress.', NULL, NULL, 1, 2026)
+    ('Vodafone Fiji', 'https://eventsfiji.cloud/sponsors/vodafone.png', 'https://vodafone.com.fj', 'platinum', 'Vodafone Fiji is a Platinum Major Sponsor, providing digital connectivity and innovation across Fiji.', NULL, NULL, 1, 2026),
+    ('Asco Motors', 'https://eventsfiji.cloud/sponsors/asco-motors.png', 'https://www.toyota-fiji.com', 'platinum', 'Asco Motors is a Platinum Major Sponsor and leading automotive distributor in Fiji — "Let''s Go with Asco!".', NULL, NULL, 2, 2026),
+    ('Extra Supermarket', 'https://eventsfiji.cloud/sponsors/extra.png', 'https://extra.com.fj', 'gold', 'Extra Supermarket is the Gold Sponsor — a proudly Fijian-owned retail business.', NULL, NULL, 1, 2026),
+    ('Merchant Finance', 'https://eventsfiji.cloud/sponsors/merchant-finance.png', 'https://merchantfinance.com.fj', 'bronze', 'Merchant Finance is a Bronze Sponsor and Fiji''s largest non-bank licensed credit institution.', NULL, NULL, 1, 2026),
+    ('Marsh', 'https://eventsfiji.cloud/sponsors/marsh.png', 'https://www.marsh.com', 'bronze', 'Marsh is a Bronze Sponsor — a global leader in risk, reinsurance, and consulting.', NULL, NULL, 2, 2026),
+    ('Motibhai Group', 'https://eventsfiji.cloud/sponsors/motibhai.png', 'https://www.motibhai.com', 'supporter', 'Motibhai Group is a Support Sponsor — a diversified Fijian corporate group established in 1931.', NULL, NULL, 1, 2026),
+    ('Chartered Accountants ANZ', 'https://eventsfiji.cloud/sponsors/ca-anz.png', 'https://www.charteredaccountantsanz.com', 'supporter', 'CA ANZ is a Support Sponsor representing over 120,000 chartered accountants across Australia and New Zealand.', NULL, NULL, 2, 2026),
+    ('Datec Fiji', 'https://eventsfiji.cloud/sponsors/datec.png', 'https://datec.com.fj', 'supporter', 'Datec is a Support Sponsor providing complete IT and E-Business solutions to Fiji and the South Pacific.', NULL, NULL, 3, 2026),
+    ('Fiji Airways', 'https://eventsfiji.cloud/sponsors/fiji-airways.png', 'https://www.fijiairways.com', 'supporter', 'Fiji Airways is a Support Sponsor and the Official Airline Partner of FICA Congress.', NULL, NULL, 4, 2026),
+    ('The Fiji Times', 'https://eventsfiji.cloud/sponsors/fiji-times.png', 'https://www.fijitimes.com.fj', 'media', 'The Fiji Times is the Official Media Partner of FICA Congress.', NULL, NULL, 1, 2026)
   `);
   console.log("✓ 10 sponsors seeded (Congress 2026)");
 
