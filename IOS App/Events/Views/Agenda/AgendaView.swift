@@ -68,33 +68,39 @@ struct AgendaView: View {
                 }
                 .padding(.bottom, 10)
 
-                // Sessions grouped by session_group
-                if isLoading {
-                    LoadingView(message: "Loading agenda...")
-                } else {
-                    ScrollView(showsIndicators: false) {
-                        LazyVStack(spacing: 10) {
-                            let grouped = groupedSessions
-                            if grouped.isEmpty {
-                                EmptyStateView(icon: "calendar.badge.exclamationmark", title: "No sessions found", subtitle: "Try a different filter")
-                            } else {
-                                let seenGroups = seenGroupSet(grouped)
-                            ForEach(Array(grouped.enumerated()), id: \.element.key) { idx, section in
-                                    // Only show header on first occurrence of each group
-                                    if let group = section.group, !seenGroups[idx] {
-                                        SessionGroupHeader(group: group, congress: selectedCongress)
-                                    }
-                                    ForEach(section.sessions) { s in
-                                        SessionCard(session: s)
+                // Sessions grouped by session_group — wrap in a frame that always
+                // fills the remaining vertical space so the top controls stay
+                // anchored even on the first render before data lands.
+                Group {
+                    if isLoading {
+                        LoadingView(message: "Loading agenda...")
+                    } else {
+                        ScrollView(showsIndicators: false) {
+                            LazyVStack(spacing: 10) {
+                                let grouped = groupedSessions
+                                if grouped.isEmpty {
+                                    EmptyStateView(icon: "calendar.badge.exclamationmark", title: "No sessions found", subtitle: "Try a different filter")
+                                } else {
+                                    let seenGroups = seenGroupSet(grouped)
+                                    ForEach(Array(grouped.enumerated()), id: \.element.key) { idx, section in
+                                        // Only show header on first occurrence of each group
+                                        if let group = section.group, !seenGroups[idx] {
+                                            SessionGroupHeader(group: group, congress: selectedCongress)
+                                        }
+                                        ForEach(section.sessions) { s in
+                                            SessionCard(session: s)
+                                        }
                                     }
                                 }
                             }
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 20)
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Color.ficaBg)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

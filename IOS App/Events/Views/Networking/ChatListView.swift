@@ -45,7 +45,7 @@ struct ChatListView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.ficaBg)
         .task { await loadMsgs() }
         .onAppear {

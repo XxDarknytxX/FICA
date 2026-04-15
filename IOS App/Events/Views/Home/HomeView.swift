@@ -14,16 +14,32 @@ struct HomeView: View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
+                    // Hero always shows immediately — uses auth state that's already loaded.
                     heroCard
-                    statsRow
-                    if !sessions.isEmpty { sessionsSection }
-                    if !announcements.filter({ $0.isPublished }).isEmpty { announcementsSection }
-                    if !speakers.filter({ $0.isKeynote }).isEmpty { speakersSection }
-                    if !networkingEvents.isEmpty { eventsSection }
-                    if !sponsors.isEmpty { sponsorsSection }
+
+                    // Data-driven sections are gated on isLoading so they all fade in
+                    // together once every API call has settled, instead of popping
+                    // in one at a time as each fetch finishes.
+                    if !isLoading {
+                        statsRow
+                        if !sessions.isEmpty { sessionsSection }
+                        if !announcements.filter({ $0.isPublished }).isEmpty { announcementsSection }
+                        if !speakers.filter({ $0.isKeynote }).isEmpty { speakersSection }
+                        if !networkingEvents.isEmpty { eventsSection }
+                        if !sponsors.isEmpty { sponsorsSection }
+                    } else {
+                        // Subtle placeholder while data loads — keeps the layout stable.
+                        ProgressView()
+                            .scaleEffect(0.9)
+                            .tint(Color.ficaGold)
+                            .padding(.top, 60)
+                            .frame(maxWidth: .infinity)
+                    }
+
                     Spacer().frame(height: 16)
                 }
                 .padding(.top, 8)
+                .animation(.easeOut(duration: 0.35), value: isLoading)
             }
             .background(Color.ficaBg)
             .navigationBarTitleDisplayMode(.inline)

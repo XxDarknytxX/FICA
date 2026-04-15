@@ -37,7 +37,7 @@ struct DirectoryView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.ficaBg)
         .task { await loadDir() }
         .sheet(item: $selectedAttendee) { AttendeeProfileSheet(attendee: $0) }

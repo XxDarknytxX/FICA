@@ -15,6 +15,9 @@ struct NetworkingView: View {
             VStack(spacing: 0) {
                 tabBar
                 Divider()
+                // Note: maxHeight: .infinity on this outer VStack below prevents
+                // the first-mount layout race where the stack briefly sizes to
+                // its intrinsic (header-only) height and renders centered.
 
                 // Keep all four tabs mounted simultaneously — only their opacity
                 // toggles. This prevents the "content flashes centered then snaps
@@ -44,6 +47,7 @@ struct NetworkingView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Color.ficaBg)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -43,7 +43,7 @@ struct MeetingsListView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.ficaBg)
         .task { await loadData() }
         .sheet(isPresented: $showCreate) { CreateMeetingSheet(attendees: attendees) { Task { await loadData() } } }
