@@ -363,35 +363,52 @@ struct HomeView: View {
     private var sponsorsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Sponsors")
+            // Cards are sized via containerRelativeFrame so exactly 3 fit across
+            // the scroll viewport on any phone width — no half-card peek on the
+            // initial position. After the user scrolls, unaligned offsets are
+            // fine (and .scrollTargetBehavior(.viewAligned) below nudges the
+            // alignment back toward card edges when they lift their finger).
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                LazyHStack(spacing: 12) {
                     ForEach(sponsors) { sp in
-                        VStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.ficaInputBg)
-                                .frame(width: 60, height: 42)
-                                .overlay(
-                                    Text(String(sp.name.prefix(2)).uppercased())
-                                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                                        .foregroundStyle(Color.ficaNavy)
-                                )
-                            Text(sp.name)
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Color.ficaText)
-                                .lineLimit(1)
-                            Text(sp.tier?.capitalized ?? "")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Color.ficaGold)
-                        }
-                        .frame(width: 80)
-                        .padding(10)
-                        .background(Color.ficaCard)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        sponsorCard(sp)
+                            .containerRelativeFrame(
+                                .horizontal,
+                                count: 3,
+                                span: 1,
+                                spacing: 12
+                            )
                     }
                 }
-                .padding(.horizontal, 20)
+                .scrollTargetLayout()
             }
+            .contentMargins(.horizontal, 20, for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
         }
+    }
+
+    private func sponsorCard(_ sp: Sponsor) -> some View {
+        VStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.ficaInputBg)
+                .frame(height: 42)
+                .overlay(
+                    Text(String(sp.name.prefix(2)).uppercased())
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.ficaNavy)
+                )
+            Text(sp.name)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color.ficaText)
+                .lineLimit(1)
+            Text(sp.tier?.capitalized ?? "")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color.ficaGold)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity)
+        .background(Color.ficaCard)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     // MARK: - Load
