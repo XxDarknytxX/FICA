@@ -4,10 +4,11 @@ import SwiftUI
 /// out from behind the circular icon.
 ///
 /// Usage:
-///     PoweredByVodafone()                          // animates on appear
-///     PoweredByVodafone(delay: 1.1)                // with a start delay (splash)
-///     PoweredByVodafone(iconHeight: 28)            // bigger
-///     PoweredByVodafone(animated: false)           // static, no reveal
+///     PoweredByVodafone()                                    // animates on appear
+///     PoweredByVodafone(delay: 1.1)                          // with a start delay
+///     PoweredByVodafone(iconHeight: 44)                      // bigger
+///     PoweredByVodafone(animated: false)                     // static, no reveal
+///     PoweredByVodafone(showLabel: false, iconHeight: 44)    // splash hero — just the logo
 struct PoweredByVodafone: View {
     /// Height of both the icon and the wordmark (they share the same source height).
     var iconHeight: CGFloat = 16
@@ -17,30 +18,51 @@ struct PoweredByVodafone: View {
     /// (fully-revealed) state immediately — use on pages where the user will
     /// see the element alongside other static content.
     var animated: Bool = true
+    /// Show the small "POWERED BY" label to the left of the icon. Turn off on
+    /// splash-style hero placements where you just want the Vodafone mark.
+    var showLabel: Bool = true
+    /// Font size of the "POWERED BY" label. Scales with iconHeight by default.
+    var labelSize: CGFloat? = nil
 
     @State private var iconVisible: Bool
     @State private var wordmarkRevealed: Bool
 
-    init(iconHeight: CGFloat = 16, delay: Double = 0, animated: Bool = true) {
+    init(
+        iconHeight: CGFloat = 16,
+        delay: Double = 0,
+        animated: Bool = true,
+        showLabel: Bool = true,
+        labelSize: CGFloat? = nil
+    ) {
         self.iconHeight = iconHeight
         self.delay = delay
         self.animated = animated
+        self.showLabel = showLabel
+        self.labelSize = labelSize
         // If not animated, jump straight to the final state.
         _iconVisible = State(initialValue: !animated)
         _wordmarkRevealed = State(initialValue: !animated)
     }
 
-    /// Roughly the icon's rendered width + a small gap (matches the original
-    /// visual spacing in the combined Vodafone PNG).
-    private var wordmarkSlideOffset: CGFloat { iconHeight + 4 }
+    /// Rendered icon width (225/223 of its height — the source is nearly square)
+    /// plus the proportional gap from the original combined Vodafone PNG.
+    /// Keeps spacing visually consistent across any iconHeight.
+    private var wordmarkSlideOffset: CGFloat { iconHeight * 1.17 }
+
+    /// Default label size scales with the icon — about half the height feels right.
+    private var resolvedLabelSize: CGFloat {
+        labelSize ?? max(9, iconHeight * 0.45)
+    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text("POWERED BY")
-                .font(.system(size: 9, weight: .semibold))
-                .kerning(1.4)
-                .foregroundStyle(Color.ficaMuted.opacity(0.55))
-                .opacity(iconVisible ? 1 : 0)
+        HStack(spacing: max(6, iconHeight * 0.4)) {
+            if showLabel {
+                Text("POWERED BY")
+                    .font(.system(size: resolvedLabelSize, weight: .semibold))
+                    .kerning(resolvedLabelSize * 0.16)
+                    .foregroundStyle(Color.ficaMuted.opacity(0.6))
+                    .opacity(iconVisible ? 1 : 0)
+            }
 
             ZStack(alignment: .leading) {
                 // Wordmark sits behind the icon. Starts at x=0 (hidden behind
