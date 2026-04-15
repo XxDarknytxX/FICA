@@ -1,5 +1,7 @@
 package com.fica.events.ui.home
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,6 +31,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
@@ -234,15 +238,21 @@ fun HomeScreen(
                     eventsCount = networkingEvents.size,
                 )
 
-                // Upcoming Sessions
-                if (sessions.isNotEmpty()) {
-                    SessionsSection(sessions = sessions.take(6))
+                // Sponsors promoted to near the top — brand visibility sits above
+                // everything except the hero + quick stats. Mirrors the iOS home layout.
+                if (sponsors.isNotEmpty()) {
+                    SponsorsSection(sponsors = sponsors, onSeeAll = onSeeAllSponsors)
                 }
 
                 // Announcements
                 val publishedAnnouncements = announcements.filter { it.published.toBool() }
                 if (publishedAnnouncements.isNotEmpty()) {
                     AnnouncementsSection(announcements = publishedAnnouncements.take(3))
+                }
+
+                // Upcoming Sessions
+                if (sessions.isNotEmpty()) {
+                    SessionsSection(sessions = sessions.take(6))
                 }
 
                 // Keynote Speakers
@@ -254,11 +264,6 @@ fun HomeScreen(
                 // Networking Events
                 if (networkingEvents.isNotEmpty()) {
                     EventsSection(events = networkingEvents.take(5))
-                }
-
-                // Sponsors
-                if (sponsors.isNotEmpty()) {
-                    SponsorsSection(sponsors = sponsors, onSeeAll = onSeeAllSponsors)
                 }
 
                 Spacer(modifier = Modifier.height(100.dp))
@@ -570,6 +575,11 @@ private fun SessionCard(session: Session) {
 
 @Composable
 private fun AnnouncementsSection(announcements: List<Announcement>) {
+    // Track which rows are expanded. Lifted to the section so each row's
+    // expanded state survives recomposition as siblings grow/shrink. Matches
+    // iOS HomeView's `expandedAnnouncements: Set<Int>`.
+    var expandedIds by remember { mutableStateOf(setOf<Int>()) }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader(title = "Announcements")
         Column(
@@ -577,74 +587,127 @@ private fun AnnouncementsSection(announcements: List<Announcement>) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             announcements.forEach { announcement ->
-                AnnouncementRow(announcement = announcement)
+                val isExpanded = expandedIds.contains(announcement.id)
+                AnnouncementRow(
+                    announcement = announcement,
+                    isExpanded = isExpanded,
+                    onToggle = {
+                        expandedIds = if (isExpanded) {
+                            expandedIds - announcement.id
+                        } else {
+                            expandedIds + announcement.id
+                        }
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun AnnouncementRow(announcement: Announcement) {
+private fun AnnouncementRow(
+    announcement: Announcement,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+) {
     val isUrgent = announcement.priority == "urgent"
-    val iconColor = if (isUrgent) FICADanger else FICAGold
+    val accent = if (isUrgent) FICADanger else FICAGold
+    val bodyLength = announcement.body?.length ?: 0
+    // Show the chevron affordance only when tapping actually changes what
+    // you see — either we're already expanded (so "Show less" must be
+    // tappable), or the body is long enough to be worth revealing.
+    val showChevron = isExpanded || bodyLength > 60
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(1.5.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.03f))
-            .background(FICACard, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(FICACard)
+            .clickable { onToggle() }
+            .animateContentSize(animationSpec = tween(durationMillis = 250))
             .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Icon — bigger rounded-square container (matches iOS)
+        // Icon — rounded-square container
         Box(
             modifier = Modifier
                 .size(46.dp)
-                .background(iconColor.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                .background(accent.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = if (isUrgent) Icons.Filled.Warning else Icons.Filled.Notifications,
                 contentDescription = null,
-                tint = iconColor,
+                tint = accent,
                 modifier = Modifier.size(22.dp),
             )
         }
 
-        // Content
+        // Content — title + relative time on the same row, body below, then
+        // the expand/collapse affordance when applicable.
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = announcement.title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = FICAText,
-                lineHeight = 18.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            announcement.body?.let { body ->
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = announcement.title,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = FICAText,
+                    lineHeight = 18.sp,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = announcement.created_at.relativeTime(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = FICAMuted,
+                )
+            }
+
+            announcement.body?.takeIf { it.isNotEmpty() }?.let { body ->
                 Text(
                     text = body,
                     fontSize = 13.sp,
                     color = FICASecondary,
                     lineHeight = 16.sp,
-                    maxLines = 1,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
 
-        // Relative time
-        Text(
-            text = announcement.created_at.relativeTime(),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = FICAMuted,
-        )
+            if (showChevron) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    Text(
+                        text = if (isExpanded) "Show less" else "Read more",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent.copy(alpha = 0.75f),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = accent.copy(alpha = 0.75f),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
     }
 }
 

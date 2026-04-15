@@ -76,6 +76,7 @@ import com.fica.events.data.api.ApiClient
 import com.fica.events.data.auth.AuthManager
 import com.fica.events.data.models.LoginRequest
 import com.fica.events.ui.components.FICALogoView
+import com.fica.events.ui.components.PoweredByVodafone
 import com.fica.events.ui.theme.FICADanger
 import com.fica.events.ui.theme.FICAGold
 import com.fica.events.ui.theme.FICAInputBg
@@ -95,7 +96,10 @@ fun SplashScreen(onFinished: () -> Unit) {
     LaunchedEffect(Unit) {
         visible = true
         lineWidth.animateTo(120f, animationSpec = tween(1200, easing = LinearEasing))
-        delay(400)
+        // Hold for ~1.3s more so the "POWERED BY vodafone" reveal (kicks off at
+        // 500ms, wordmark slide lands ~850ms) has time to settle before dismiss.
+        // Matches the ~2.5s total on iOS.
+        delay(1300)
         onFinished()
     }
 
@@ -248,6 +252,17 @@ fun SplashScreen(onFinished: () -> Unit) {
                 )
             }
         }
+
+        // "POWERED BY" + Vodafone icon pops in, then the "vodafone" wordmark
+        // springs out from behind the icon. Fires mid-sequence so it lands
+        // alongside the tagline — matches the iOS splash treatment.
+        PoweredByVodafone(
+            iconHeight = 16.dp,
+            delayMs = 500L,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 28.dp),
+        )
     }
 }
 
@@ -642,6 +657,16 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 fontSize = 11.sp,
                 color = Color.White.copy(alpha = 0.28f),
                 textAlign = TextAlign.Center,
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Powered by Vodafone — static (no reveal) on the login page, matching iOS.
+            // White-tinted label so it reads on the dark navy background.
+            PoweredByVodafone(
+                iconHeight = 16.dp,
+                animated = false,
+                labelColor = Color.White.copy(alpha = 0.45f),
             )
 
             Spacer(modifier = Modifier.weight(0.5f))
