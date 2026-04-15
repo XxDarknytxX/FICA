@@ -16,22 +16,33 @@ struct NetworkingView: View {
                 tabBar
                 Divider()
 
-                // Only render the active tab. The content swap must be instant —
-                // any lingering animation makes the new view's VStack briefly land
-                // mid-screen (content shorter than container) before snapping up.
-                Group {
-                    switch selectedTab {
-                    case 0: DirectoryView()
-                    case 1: ConnectionsView()
-                    case 2: ChatListView()
-                    case 3: MeetingsListView()
-                    default: DirectoryView()
-                    }
+                // Keep all four tabs mounted simultaneously — only their opacity
+                // toggles. This prevents the "content flashes centered then snaps
+                // to top" glitch caused by SwiftUI destroying and re-creating the
+                // child view on every tab change (state reset + .task re-fires +
+                // intrinsic-height layout race).
+                //
+                // Side benefit: scroll position, filters, and in-flight data
+                // survive across tab switches.
+                ZStack(alignment: .top) {
+                    DirectoryView()
+                        .opacity(selectedTab == 0 ? 1 : 0)
+                        .zIndex(selectedTab == 0 ? 1 : 0)
+                        .allowsHitTesting(selectedTab == 0)
+                    ConnectionsView()
+                        .opacity(selectedTab == 1 ? 1 : 0)
+                        .zIndex(selectedTab == 1 ? 1 : 0)
+                        .allowsHitTesting(selectedTab == 1)
+                    ChatListView()
+                        .opacity(selectedTab == 2 ? 1 : 0)
+                        .zIndex(selectedTab == 2 ? 1 : 0)
+                        .allowsHitTesting(selectedTab == 2)
+                    MeetingsListView()
+                        .opacity(selectedTab == 3 ? 1 : 0)
+                        .zIndex(selectedTab == 3 ? 1 : 0)
+                        .allowsHitTesting(selectedTab == 3)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                // Nuke any inherited animation on the view swap (belt-and-braces
-                // against any withAnimation callers upstream).
-                .transaction { $0.animation = nil }
             }
             .background(Color.ficaBg)
             .navigationBarTitleDisplayMode(.inline)
