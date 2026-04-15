@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var networkingEvents: [NetworkingEvent] = []
     @State private var isLoading = true
     @State private var showProfile = false
+    @State private var expandedAnnouncements: Set<Int> = []
 
     var body: some View {
         NavigationStack {
@@ -22,11 +23,13 @@ struct HomeView: View {
                     // in one at a time as each fetch finishes.
                     if !isLoading {
                         statsRow
-                        if !sessions.isEmpty { sessionsSection }
+                        // Sponsors promoted to near the top — brand visibility sits
+                        // above everything except the quick stats.
+                        if !sponsors.isEmpty { sponsorsSection }
                         if !announcements.filter({ $0.isPublished }).isEmpty { announcementsSection }
+                        if !sessions.isEmpty { sessionsSection }
                         if !speakers.filter({ $0.isKeynote }).isEmpty { speakersSection }
                         if !networkingEvents.isEmpty { eventsSection }
-                        if !sponsors.isEmpty { sponsorsSection }
                     } else {
                         // Subtle placeholder while data loads — keeps the layout stable.
                         ProgressView()
@@ -215,40 +218,78 @@ struct HomeView: View {
             SectionHeader(title: "Announcements")
             VStack(spacing: 8) {
                 ForEach(announcements.filter { $0.isPublished }.prefix(3)) { a in
-                    HStack(spacing: 12) {
-                        Image(systemName: a.priority == "urgent" ? "exclamationmark.triangle.fill" : "bell.badge.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(a.priority == "urgent" ? Color.ficaDanger : Color.ficaGold)
-                            .frame(width: 38, height: 38)
-                            .background((a.priority == "urgent" ? Color.ficaDanger : Color.ficaGold).opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(a.title)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Color.ficaText)
-                                .lineLimit(1)
-                            if let body = a.body {
-                                Text(body)
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color.ficaSecondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        Spacer()
+                    announcementRow(a)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func announcementRow(_ a: Announcement) -> some View {
+        let isExpanded = expandedAnnouncements.contains(a.id)
+        let accent: Color = a.priority == "urgent" ? Color.ficaDanger : Color.ficaGold
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                if isExpanded {
+                    expandedAnnouncements.remove(a.id)
+                } else {
+                    expandedAnnouncements.insert(a.id)
+                }
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: a.priority == "urgent" ? "exclamationmark.triangle.fill" : "bell.badge.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(accent)
+                    .frame(width: 38, height: 38)
+                    .background(accent.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(a.title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.ficaText)
+                            .lineLimit(isExpanded ? nil : 1)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
                         if let d = a.created_at {
                             Text(d.relativeTime)
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(Color.ficaMuted)
                         }
                     }
-                    .padding(14)
-                    .background(Color.ficaCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .shadow(color: .black.opacity(0.03), radius: 4, x: 0, y: 2)
+                    if let body = a.body, !body.isEmpty {
+                        Text(body)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.ficaSecondary)
+                            .lineLimit(isExpanded ? nil : 1)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    // Chevron affordance — shown when the body is long enough
+                    // that tapping actually changes what you see.
+                    if isExpanded || ((a.body?.count ?? 0) > 60) {
+                        HStack(spacing: 4) {
+                            Spacer()
+                            Text(isExpanded ? "Show less" : "Read more")
+                                .font(.system(size: 10, weight: .semibold))
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .foregroundStyle(accent.opacity(0.75))
+                        .padding(.top, 2)
+                    }
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(14)
+            .background(Color.ficaCard)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.03), radius: 4, x: 0, y: 2)
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Speakers
