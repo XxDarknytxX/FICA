@@ -330,6 +330,20 @@ struct LoginView: View {
                 .foregroundStyle(Color.ficaMuted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
+
+            // Powered by Vodafone
+            HStack(spacing: 8) {
+                Text("POWERED BY")
+                    .font(.system(size: 9, weight: .semibold))
+                    .kerning(1.4)
+                    .foregroundStyle(Color.ficaMuted.opacity(0.55))
+
+                Image("VodafoneLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 16)
+            }
+            .padding(.top, 12)
         }
     }
 

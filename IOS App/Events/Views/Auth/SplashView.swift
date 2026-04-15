@@ -15,6 +15,7 @@ struct SplashView: View {
     @State private var shimmerOffset: CGFloat = -200
     @State private var particlesVisible = false
     @State private var lineWidth: CGFloat = 0
+    @State private var poweredByOpacity: Double = 0
 
     var body: some View {
         ZStack {
@@ -135,6 +136,21 @@ struct SplashView: View {
                 }
 
                 Spacer()
+
+                // Powered by Vodafone — brand partner attribution at bottom
+                HStack(spacing: 8) {
+                    Text("POWERED BY")
+                        .font(.system(size: 9, weight: .semibold))
+                        .kerning(1.4)
+                        .foregroundStyle(Color.ficaMuted.opacity(0.55))
+
+                    Image("VodafoneLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 16)
+                }
+                .opacity(poweredByOpacity)
+                .padding(.bottom, 28)
             }
         }
         .onAppear {
@@ -184,7 +200,12 @@ struct SplashView: View {
             lineWidth = 120
         }
 
-        // Phase 8: Dismiss
+        // Phase 8: Powered-by Vodafone fades in
+        withAnimation(.easeOut(duration: 0.6).delay(1.1)) {
+            poweredByOpacity = 1.0
+        }
+
+        // Phase 9: Dismiss
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
             onFinished()
         }
