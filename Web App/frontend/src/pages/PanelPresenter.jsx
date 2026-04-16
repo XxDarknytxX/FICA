@@ -1,32 +1,20 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, CheckCircle2, Circle, Trash2, RefreshCw,
-  MessageSquare, MessageSquareOff, User as UserIcon,
-  Clock, Radio, Eye,
+  ArrowLeft, CheckCircle2, Circle, Trash2,
+  MessageSquare, User as UserIcon, Clock,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import { api } from "../services/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
-import {
-  LiveSwitch, LiveDot, LiveBadge, Chip, Spinner, SmoothCount,
-} from "../components/live";
+import { LiveSwitch, LiveDot, Chip, Spinner, SmoothCount } from "../components/live";
 
 /**
- * Panel Presenter view — the moderator runs this on a tablet during a
- * panel session. Questions stream in from delegates, moderator reads
- * them aloud, taps Mark Read (strike-through) or Dismiss (soft delete
- * from every feed).
+ * Panel Presenter — the moderator reads questions aloud from this view.
  *
- * Redesigned to:
- *   • Share the same LiveSwitch used on the dashboard + Panels list, so
- *     "the toggle inside vs outside the presenter" finally behaves the
- *     same way and pushes flips over WS to every viewer.
- *   • Use a navy hero banner with a big connected LiveDot — makes the
- *     "are we actually live?" answer obvious from across the stage.
- *   • Sort oldest-first so reading flows chronologically; unread ones
- *     get a gold border + highlight.
- *   • Full-width action buttons at mobile widths.
+ * Restrained hero (white card, 1px border) so the question list is the
+ * focus. The discussion toggle on the hero is the same `LiveSwitch` used
+ * on the dashboard and the Panels list — one component, one WS feed.
  */
 export default function PanelPresenter() {
   const { id } = useParams();
@@ -93,9 +81,7 @@ export default function PanelPresenter() {
 
   async function markRead(q, read) {
     setQuestions((prev) => prev.map((x) =>
-      x.id === q.id
-        ? { ...x, moderated_at: read ? new Date().toISOString() : null }
-        : x
+      x.id === q.id ? { ...x, moderated_at: read ? new Date().toISOString() : null } : x
     ));
     try {
       await api(`/event/panels/questions/${q.id}/read`, {
@@ -122,7 +108,7 @@ export default function PanelPresenter() {
   if (loading) {
     return (
       <Layout>
-        <div style={{ display: "inline-flex", gap: 8, alignItems: "center", color: "var(--text-muted)" }}>
+        <div className="inline-flex items-center gap-2 text-slate-500">
           <Spinner /> Loading panel...
         </div>
       </Layout>
@@ -134,92 +120,74 @@ export default function PanelPresenter() {
 
   return (
     <Layout>
-      <div className="presenter-shell">
-        {/* ─── Back button row ─────────────────────────────────────── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div className="flex flex-col gap-3">
+        {/* Back + breadcrumb */}
+        <div className="flex items-center gap-2.5">
           <button
-            type="button"
-            className="btn-ghost"
             onClick={() => navigate(-1)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px" }}
+            className="inline-flex items-center gap-1.5 px-2.5 h-8 text-[12.5px] font-medium text-slate-600 hover:text-slate-900 rounded-md hover:bg-slate-100 transition-colors"
           >
-            <ArrowLeft size={15} /> Back
+            <ArrowLeft size={14} /> Back
           </button>
-          <div style={{ color: "var(--text-subtle)", fontSize: 12.5 }}>
-            Panel presenter mode
-          </div>
+          <div className="text-[11.5px] text-slate-400">Panel presenter</div>
         </div>
 
-        {/* ─── Hero banner ─────────────────────────────────────────── */}
-        <div className="presenter-hero">
-          <div>
-            <div className="presenter-hero-eyebrow">
-              <Radio size={13} color="var(--gold)" />
-              Live stream · Panel Q&amp;A
+        {/* Hero */}
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center justify-between gap-4 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-medium text-slate-500 mb-1 inline-flex items-center gap-1.5">
+              <LiveDot connected={connected} />
+              Panel Q&amp;A
             </div>
-            <h1 className="presenter-hero-title">
+            <h1 className="m-0 text-[17px] font-bold text-slate-900 tracking-[-0.018em] leading-[1.3]">
               {panel?.title || "Panel"}
             </h1>
-            <div className="presenter-hero-meta">
-              <LiveDot connected={connected} label={connected ? "LIVE" : "RECONNECTING"} />
-              <Chip icon={MessageSquare} tone="gold">
-                <SmoothCount value={active.length} />{" "}
-                {active.length === 1 ? "question" : "questions"}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <Chip icon={MessageSquare}>
+                <SmoothCount value={active.length} /> {active.length === 1 ? "question" : "questions"}
               </Chip>
               {unreadCount > 0 && (
-                <Chip icon={Eye} tone="gold">
+                <Chip tone="accent">
                   <SmoothCount value={unreadCount} /> unread
                 </Chip>
               )}
             </div>
           </div>
-          <div className="presenter-hero-toggle">
-            <span className="presenter-hero-toggle-label">Discussion</span>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-[12px] font-semibold text-slate-900">Discussion</div>
+              <div className="text-[11px] text-slate-500">
+                {enabled ? "Accepting questions" : "Closed to delegates"}
+              </div>
+            </div>
             <LiveSwitch
               checked={enabled}
               onChange={toggleDiscussion}
               disabled={toggling}
-              size="lg"
-              labelOn="Open"
-              labelOff="Closed"
               ariaLabel="Panel discussion"
             />
           </div>
         </div>
 
         {err && (
-          <div
-            className="animate-in"
-            style={{
-              background: "var(--danger-soft)",
-              border: "1px solid #fecaca",
-              color: "var(--danger)",
-              borderRadius: 12,
-              padding: "10px 14px",
-              fontSize: 13,
-            }}
-          >
+          <div className="px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
             {err}
           </div>
         )}
 
-        {/* ─── Question stream ─────────────────────────────────────── */}
+        {/* Stream */}
         {active.length === 0 ? (
-          <div className="presenter-empty">
-            <MessageSquare size={32} style={{ opacity: 0.4, margin: "0 auto 8px" }} />
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-              No questions yet
-            </div>
-            <div style={{ fontSize: 13, marginTop: 6 }}>
-              {enabled
-                ? "Questions from delegates appear here in real time."
-                : "Open the discussion for delegates to start asking."}
+          <div className="bg-white border border-dashed border-slate-200 rounded-[10px] py-10 px-5 text-center text-slate-500">
+            <MessageSquare size={24} className="opacity-40 mx-auto mb-2" />
+            <div className="text-[13.5px] font-semibold text-slate-900">No questions yet</div>
+            <div className="text-[12px] mt-1">
+              {enabled ? "Questions appear here in real time." : "Open the discussion to accept questions."}
             </div>
           </div>
         ) : (
-          <div className="presenter-stream">
+          <div className="flex flex-col gap-2">
             {active.map((q) => (
-              <PresenterCard
+              <QuestionCard
                 key={q.id}
                 q={q}
                 onToggleRead={() => markRead(q, !q.moderated_at)}
@@ -233,41 +201,57 @@ export default function PanelPresenter() {
   );
 }
 
-function PresenterCard({ q, onToggleRead, onDismiss }) {
+function QuestionCard({ q, onToggleRead, onDismiss }) {
   const read = !!q.moderated_at;
   return (
-    <div className="presenter-question" data-read={read || undefined} data-unread={!read || undefined}>
-      <div className="presenter-question-text">“{q.question}”</div>
-      <div className="presenter-question-meta">
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <UserIcon size={13} />
-          <strong style={{ color: "var(--text)" }}>{q.attendee_name || "Anonymous"}</strong>
-          {q.attendee_org && <span>· {q.attendee_org}</span>}
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <Clock size={12} /> {relTime(q.created_at)}
-        </span>
-        {read && <Chip tone="success" compact>Marked read</Chip>}
+    <div
+      className={`
+        rounded-[10px] border px-4 py-3.5 grid gap-2.5 transition-colors
+        ${read
+          ? "bg-slate-50 border-slate-200 opacity-65"
+          : "bg-white border-[#C8A951]/50"}
+      `}
+      style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}
+    >
+      <div
+        className={`
+          col-span-2 text-[15.5px] leading-[1.55] text-slate-900 font-medium tracking-[-0.005em]
+          ${read ? "line-through decoration-slate-400" : ""}
+        `}
+      >
+        {q.question}
       </div>
-      <div className="presenter-question-actions">
+      <div className="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-slate-500 leading-[1.4]">
+        <span className="inline-flex items-center gap-1">
+          <UserIcon size={12} />
+          <span className="text-slate-900 font-semibold">{q.attendee_name || "Anonymous"}</span>
+          {q.attendee_org && <span className="text-slate-400">· {q.attendee_org}</span>}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Clock size={11} /> {relTime(q.created_at)}
+        </span>
+        {read && <Chip tone="success">Read</Chip>}
+      </div>
+      <div className="col-span-2 flex gap-1.5 flex-wrap">
         <button
-          type="button"
-          className="presenter-action"
-          data-variant={read ? "ghost" : "primary"}
           onClick={onToggleRead}
-          aria-pressed={read}
+          className={`
+            inline-flex items-center justify-center gap-1.5
+            h-8 px-3 rounded-md text-[12px] font-semibold
+            transition-colors
+            ${read
+              ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              : "bg-[#C8A951] border border-[#a88a38] text-[#091f42] hover:bg-[#a88a38] hover:text-white"}
+          `}
         >
-          {read ? <Circle size={16} /> : <CheckCircle2 size={16} />}
+          {read ? <Circle size={13} /> : <CheckCircle2 size={13} />}
           {read ? "Mark unread" : "Mark read"}
         </button>
         <button
-          type="button"
-          className="presenter-action"
-          data-variant="danger"
           onClick={onDismiss}
-          title="Remove this question from every delegate's feed"
+          className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[12px] font-semibold border border-slate-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors"
         >
-          <Trash2 size={16} />
+          <Trash2 size={13} />
           Dismiss
         </button>
       </div>

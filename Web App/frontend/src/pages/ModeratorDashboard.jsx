@@ -1,33 +1,25 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Vote, Eye, EyeOff, MessageSquare, Bell, Sliders,
-  ChevronRight, RefreshCw, Megaphone, Trophy, Zap, Radio, Calendar,
+  Vote, Eye, EyeOff, MessageSquare, Bell, Trophy,
+  RefreshCw, Megaphone, Zap, ChevronRight, Calendar,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import { api } from "../services/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import {
-  LiveSwitch, LiveDot, LiveBadge, StatTile, ToggleCard, ActionCard,
-  Chip, PageTitle, Spinner, SmoothCount,
+  LiveSwitch, LiveDot, LiveBadge, StatTile, Chip, PageTitle, Spinner, SmoothCount,
 } from "../components/live";
 
 /**
- * Moderator Control Center — tablet-first single-screen dashboard.
+ * Moderator Control Center.
  *
- * Renders with a single GET to /event/mod-dashboard?year=2026, then keeps
- * state live via the shared /ws subscription (voting toggles, panel
- * discussion flips, new/dismissed panel questions).
- *
- * Layout (widest first):
- *   ┌─ Hero card: event status + primary WS indicator + quick nav ──┐
- *   ├─ Stat tiles: projects / votes / announcements / unread Qs    ┤
- *   ├─ Global toggles: voting open · results visibility            ┤
- *   ├─ Per-panel cards: switch + question count + presenter link   ┤
- *   └─ Quick actions: announcements · projects                     ┘
- *
- * On ≤640px the grid collapses to one column, the hero stacks, and the
- * switches grow to full-width cards for thumb use.
+ * Restrained, data-first layout:
+ *   • Compact hero row with the current event state (no navy banner).
+ *   • 4-tile stat row, clean numbers, no icon noise.
+ *   • Global toggles: one row, each an `.mcard` with an iOS switch.
+ *   • Per-panel cards: dense grid, small switch on the right, muted
+ *     time/room meta, outline "Present" button.
  */
 export default function ModeratorDashboard() {
   const [data, setData] = useState(null);
@@ -50,65 +42,53 @@ export default function ModeratorDashboard() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 30_000); // fallback poll — WS is primary
+    const t = setInterval(load, 30_000);
     return () => clearInterval(t);
   }, [load]);
 
-  // Live sync — every server broadcast that changes dashboard state is
-  // handled here. No lag between admin flips and the dashboard updating.
   const { connected } = useLiveSocket({
     voting_open_changed: (d) =>
-      setData((prev) => prev ? { ...prev, voting_open: !!d.voting_open } : prev),
+      setData((p) => p ? { ...p, voting_open: !!d.voting_open } : p),
     voting_results_visibility_changed: (d) =>
-      setData((prev) => prev ? { ...prev, voting_results_visible: !!d.voting_results_visible } : prev),
+      setData((p) => p ? { ...p, voting_results_visible: !!d.voting_results_visible } : p),
     panel_discussion_changed: (d) =>
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          panels: prev.panels.map((p) =>
-            String(p.id) === String(d.session_id)
-              ? { ...p, discussion_enabled: !!d.discussion_enabled }
-              : p
-          ),
-        };
-      }),
+      setData((p) => p ? {
+        ...p,
+        panels: p.panels.map((x) =>
+          String(x.id) === String(d.session_id)
+            ? { ...x, discussion_enabled: !!d.discussion_enabled }
+            : x
+        ),
+      } : p),
     panel_question_posted: (d) =>
-      setData((prev) => {
-        if (!prev || !d?.question) return prev;
+      setData((p) => {
+        if (!p || !d?.question) return p;
         return {
-          ...prev,
-          panels: prev.panels.map((p) =>
-            String(p.id) === String(d.question.session_id)
+          ...p,
+          panels: p.panels.map((x) =>
+            String(x.id) === String(d.question.session_id)
               ? {
-                  ...p,
-                  question_count: Number(p.question_count || 0) + 1,
-                  pending_count: Number(p.pending_count || 0) + 1,
+                  ...x,
+                  question_count: Number(x.question_count || 0) + 1,
+                  pending_count: Number(x.pending_count || 0) + 1,
                 }
-              : p
+              : x
           ),
         };
       }),
     panel_question_dismissed: (d) =>
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          panels: prev.panels.map((p) =>
-            String(p.id) === String(d.session_id)
-              ? {
-                  ...p,
-                  question_count: Math.max(0, Number(p.question_count || 0) - 1),
-                }
-              : p
-          ),
-        };
-      }),
+      setData((p) => p ? {
+        ...p,
+        panels: p.panels.map((x) =>
+          String(x.id) === String(d.session_id)
+            ? { ...x, question_count: Math.max(0, Number(x.question_count || 0) - 1) }
+            : x
+        ),
+      } : p),
   });
 
   async function toggleVoting(next) {
     setBusy("voting");
-    // Optimistic
     setData((p) => p ? { ...p, voting_open: next } : p);
     try {
       await api("/event/votes/toggle", { method: "POST", body: { open: next } });
@@ -131,10 +111,10 @@ export default function ModeratorDashboard() {
 
   async function togglePanel(panel, next) {
     setBusy(`panel-${panel.id}`);
-    setData((prev) => prev ? {
-      ...prev,
-      panels: prev.panels.map((p) => p.id === panel.id ? { ...p, discussion_enabled: next } : p),
-    } : prev);
+    setData((p) => p ? {
+      ...p,
+      panels: p.panels.map((x) => x.id === panel.id ? { ...x, discussion_enabled: next } : x),
+    } : p);
     try {
       await api(`/event/panels/${panel.id}/discussion`, {
         method: "PUT",
@@ -142,18 +122,18 @@ export default function ModeratorDashboard() {
       });
     } catch (e) {
       setErr(e.message);
-      setData((prev) => prev ? {
-        ...prev,
-        panels: prev.panels.map((p) => p.id === panel.id ? { ...p, discussion_enabled: !next } : p),
-      } : prev);
+      setData((p) => p ? {
+        ...p,
+        panels: p.panels.map((x) => x.id === panel.id ? { ...x, discussion_enabled: !next } : x),
+      } : p);
     } finally { setBusy(null); }
   }
 
   if (loading) {
     return (
       <Layout>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-muted)", padding: 24 }}>
-          <Spinner /> Loading control center...
+        <div className="flex items-center gap-2.5 text-slate-500 py-6">
+          <Spinner /> Loading...
         </div>
       </Layout>
     );
@@ -167,167 +147,105 @@ export default function ModeratorDashboard() {
     <Layout>
       <PageTitle
         title="Control Center"
-        subtitle="Flip a switch to push it to every delegate instantly."
+        subtitle="Live toggles push to every delegate instantly."
         connected={connected}
         right={
           <button
-            className="btn-ghost"
             onClick={load}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            className="inline-flex items-center gap-1.5 px-3 h-8 text-[12.5px] font-medium text-slate-600 hover:text-slate-900 rounded-md hover:bg-slate-100 transition-colors"
           >
-            <RefreshCw size={14} /> Refresh
+            <RefreshCw size={13} /> Refresh
           </button>
         }
       />
 
       {err && (
-        <div
-          className="animate-in"
-          style={{
-            background: "var(--danger-soft)",
-            border: "1px solid #fecaca",
-            color: "var(--danger)",
-            borderRadius: 12,
-            padding: "10px 14px",
-            marginBottom: 14,
-            fontSize: 13,
-          }}
-        >
+        <div className="mb-3 px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
           {err}
         </div>
       )}
 
-      {/* ─── Hero: event pulse ─────────────────────────────────────── */}
-      <div
-        style={{
-          background: "linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 60%, #1a4080 100%)",
-          color: "white",
-          borderRadius: 18,
-          padding: "24px 26px",
-          marginBottom: 18,
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          gap: 20,
-          alignItems: "center",
-          boxShadow: "var(--shadow-md)",
-        }}
-        className="animate-in hero-card"
-      >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <Radio size={14} color="var(--gold)" />
-            <span style={{
-              color: "var(--gold)", fontSize: 11, fontWeight: 800,
-              letterSpacing: "0.1em", textTransform: "uppercase",
-            }}>
-              FICA Congress · Live
-            </span>
+      {/* Event state hero — inline, subtle */}
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 mb-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-medium text-slate-500 mb-1 flex items-center gap-1.5">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${data?.voting_open ? "bg-emerald-500" : "bg-slate-300"}`} />
+            {data?.voting_open ? "Event is live" : "Event idle"}
           </div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-0.015em", lineHeight: 1.2 }}>
+          <h2 className="m-0 text-[16px] font-semibold text-slate-900 tracking-[-0.018em] leading-[1.3]">
             {data?.voting_open ? "Voting is open" : "Voting is closed"}
-            <span style={{ color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>
-              {" · "}
-              {openPanelCount} of {panels.length} panels taking questions
-            </span>
+            <span className="text-slate-400 font-normal"> · {openPanelCount} of {panels.length} panels taking questions</span>
           </h2>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-            <Chip icon={Trophy} tone="gold">
-              {data?.stats?.projects ?? 0} projects
-            </Chip>
-            <Chip icon={Vote} tone="gold">
-              <SmoothCount value={data?.stats?.votes ?? 0} /> votes
-            </Chip>
-            <Chip icon={Bell} tone="gold">
-              {data?.stats?.published_announcements ?? 0} live announcements
-            </Chip>
-            {pendingTotal > 0 && (
-              <Chip icon={Zap} tone="gold">
-                <SmoothCount value={pendingTotal} /> unread questions
-              </Chip>
-            )}
-          </div>
         </div>
-        <div style={{ alignSelf: "center" }}>
-          <LiveDot connected={connected} label={connected ? "LIVE" : "RECONNECTING"} />
-        </div>
+        {pendingTotal > 0 && (
+          <Chip tone="accent" icon={Zap}>
+            <SmoothCount value={pendingTotal} /> unread {pendingTotal === 1 ? "question" : "questions"}
+          </Chip>
+        )}
       </div>
 
-      {/* ─── Stat tiles ────────────────────────────────────────────── */}
-      <div className="fluid-grid tight" style={{ marginBottom: 22 }}>
-        <StatTile icon={Trophy} label="Projects" value={data?.stats?.projects ?? 0} tone="navy" />
-        <StatTile icon={Vote} label="Votes cast" value={<SmoothCount value={data?.stats?.votes ?? 0} />} tone="navy" />
-        <StatTile icon={Bell} label="Live announcements" value={data?.stats?.published_announcements ?? 0} />
+      {/* Stats */}
+      <div className="grid gap-2.5 grid-cols-2 md:grid-cols-4 mb-6">
+        <StatTile label="Projects" value={data?.stats?.projects ?? 0} />
+        <StatTile label="Votes cast" value={<SmoothCount value={data?.stats?.votes ?? 0} />} />
+        <StatTile label="Announcements" value={data?.stats?.published_announcements ?? 0} hint="published" />
         <StatTile
-          icon={MessageSquare}
           label="Unread questions"
           value={<SmoothCount value={pendingTotal} />}
-          tone={pendingTotal > 0 ? "gold" : "neutral"}
-          hint={pendingTotal > 0 ? "Tap a panel below to read aloud" : undefined}
+          accent={pendingTotal > 0}
+          hint={pendingTotal > 0 ? "Across all panels" : undefined}
         />
       </div>
 
-      {/* ─── Global toggles ────────────────────────────────────────── */}
+      {/* Global toggles */}
       <SectionHeading title="Global" />
-      <div className="fluid-grid" style={{ marginBottom: 26 }}>
-        <ToggleCard
+      <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <ToggleRow
           icon={Vote}
           title="Voting"
-          subtitle={
-            data?.voting_open
-              ? "Delegates can cast votes right now."
-              : "Ballot is closed — projects are visible but no one can vote."
-          }
+          hint={data?.voting_open ? "Delegates can cast votes" : "Ballot is closed"}
           checked={!!data?.voting_open}
           onToggle={toggleVoting}
           disabled={busy === "voting"}
-          labelOn="Open"
-          labelOff="Closed"
         />
-        <ToggleCard
+        <ToggleRow
           icon={data?.voting_results_visible ? Eye : EyeOff}
-          title="Show results to delegates"
-          subtitle={
-            data?.voting_results_visible
-              ? "Tallies and leaderboard are visible to everyone."
-              : "Results stay hidden — admins still see the leaderboard."
-          }
+          title="Show results"
+          hint={data?.voting_results_visible ? "Tally visible to delegates" : "Hidden from delegates"}
           checked={!!data?.voting_results_visible}
           onToggle={toggleResults}
           disabled={busy === "results"}
-          labelOn="Shown"
-          labelOff="Hidden"
         />
-        <ActionCard
+        <QuickLink
           icon={Megaphone}
-          title="Post an announcement"
-          subtitle="Push a message to every delegate's home screen."
+          title="Announcements"
+          hint="Compose & publish"
           onClick={() => navigate("/announcements")}
         />
-        <ActionCard
+        <QuickLink
           icon={Trophy}
-          title="Manage projects"
-          subtitle="Add, edit, or reorder the voting slate."
+          title="Projects"
+          hint="Manage voting slate"
           onClick={() => navigate("/projects")}
         />
       </div>
 
-      {/* ─── Per-panel controls ────────────────────────────────────── */}
-      <SectionHeading
-        title="Panel Discussions"
-        right={pendingTotal > 0 && <LiveBadge count={pendingTotal} pulse />}
-      />
+      {/* Per-panel */}
+      <div className="flex items-center justify-between mb-3">
+        <SectionHeading title="Panel Discussions" inline />
+        {pendingTotal > 0 && (
+          <LiveBadge count={pendingTotal} tone="accent" pulse />
+        )}
+      </div>
+
       {panels.length === 0 ? (
-        <div className="presenter-empty">
-          <Calendar size={28} style={{ opacity: 0.5, margin: "0 auto 8px" }} />
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>
-            No panel sessions scheduled
-          </div>
-          <div style={{ fontSize: 12.5, marginTop: 4 }}>
-            Panels with type="panel" for 2026 will appear here.
-          </div>
+        <div className="bg-white border border-dashed border-slate-200 rounded-[10px] py-9 px-5 text-center text-slate-500">
+          <Calendar size={22} className="opacity-40 mx-auto mb-2" />
+          <div className="text-[13.5px] font-semibold text-slate-900">No panel sessions</div>
+          <div className="text-[12px] mt-1">Panels tagged congress_year=2026 appear here.</div>
         </div>
       ) : (
-        <div className="fluid-grid wide">
+        <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
           {panels.map((p) => (
             <PanelCard
               key={p.id}
@@ -343,31 +261,66 @@ export default function ModeratorDashboard() {
   );
 }
 
-// ─── sub-components ─────────────────────────────────────────────────────
+// ─── Sub-components ────────────────────────────────────────────────────
 
-function SectionHeading({ title, right }) {
+function SectionHeading({ title, inline = false }) {
+  return (
+    <h2 className={`
+      text-[11px] font-semibold text-slate-500 uppercase tracking-[0.06em] m-0
+      ${inline ? "" : "mb-3"}
+    `}>
+      {title}
+    </h2>
+  );
+}
+
+function ToggleRow({ icon: Icon, title, hint, checked, onToggle, disabled }) {
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        margin: "4px 0 12px",
-        gap: 10,
-      }}
+      className={`
+        bg-white border rounded-[10px] px-3.5 py-3 flex items-center justify-between gap-3
+        transition-colors
+        ${checked ? "border-emerald-500/40" : "border-slate-200"}
+      `}
     >
-      <h2 style={{
-        fontSize: 12,
-        fontWeight: 800,
-        color: "var(--text-muted)",
-        letterSpacing: "0.09em",
-        textTransform: "uppercase",
-        margin: 0,
-      }}>
-        {title}
-      </h2>
-      {right}
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`
+          w-8 h-8 rounded-lg flex items-center justify-center shrink-0
+          ${checked ? "bg-emerald-500/12 text-emerald-700" : "bg-slate-100 text-slate-500"}
+        `}>
+          <Icon size={15} strokeWidth={2} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-slate-900 leading-tight">{title}</div>
+          <div className="text-[11.5px] text-slate-500 leading-[1.4] mt-0.5 truncate">{hint}</div>
+        </div>
+      </div>
+      <LiveSwitch checked={checked} onChange={onToggle} disabled={disabled} ariaLabel={title} />
     </div>
+  );
+}
+
+function QuickLink({ icon: Icon, title, hint, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="
+        bg-white border border-slate-200 rounded-[10px] px-3.5 py-3
+        flex items-center justify-between gap-3 text-left
+        hover:border-slate-300 hover:bg-slate-50 transition-colors
+      "
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+          <Icon size={15} strokeWidth={2} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-slate-900 leading-tight">{title}</div>
+          <div className="text-[11.5px] text-slate-500 leading-[1.4] mt-0.5 truncate">{hint}</div>
+        </div>
+      </div>
+      <ChevronRight size={16} className="text-slate-400 shrink-0" />
+    </button>
   );
 }
 
@@ -376,14 +329,22 @@ function PanelCard({ panel, busy, onToggle, onOpen }) {
   const total = Number(panel.question_count || 0);
   const pending = Number(panel.pending_count || 0);
   return (
-    <div className="live-card" data-active={enabled || undefined}>
-      <div className="live-card-head">
-        <div className="live-card-head-left" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
-          <div className="live-card-title" style={{ whiteSpace: "normal", fontSize: 15 }}>
-            {panel.title || "Panel discussion"}
+    <div
+      className={`
+        bg-white border rounded-[10px] p-3.5 flex flex-col gap-2.5
+        transition-colors
+        ${enabled ? "border-emerald-500/40" : "border-slate-200"}
+      `}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[13.5px] font-semibold text-slate-900 leading-[1.3] tracking-[-0.005em]">
+            {panel.title || "Panel"}
           </div>
-          <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            {formatPanelTime(panel)}
+          <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[11.5px] text-slate-500 mt-1">
+            {formatPanelMeta(panel).map((m, i) => (
+              <span key={i}>{m}</span>
+            ))}
           </div>
         </div>
         <LiveSwitch
@@ -394,44 +355,41 @@ function PanelCard({ panel, busy, onToggle, onOpen }) {
         />
       </div>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <Chip icon={MessageSquare} compact>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Chip icon={MessageSquare}>
           <SmoothCount value={total} /> {total === 1 ? "question" : "questions"}
         </Chip>
         {pending > 0 && (
-          <Chip icon={Zap} tone="gold" compact>
+          <Chip tone="accent" icon={Zap}>
             <SmoothCount value={pending} /> unread
           </Chip>
-        )}
-        {!enabled && (
-          <Chip tone="danger" compact>Discussion closed</Chip>
         )}
       </div>
 
       <button
-        className="btn-primary"
         onClick={onOpen}
-        style={{
-          width: "100%",
-          justifyContent: "center",
-          marginTop: 4,
-          minHeight: 44,
-        }}
+        className="
+          inline-flex items-center justify-center gap-1.5
+          h-9 px-3 rounded-md
+          border border-slate-200 text-slate-900 text-[12.5px] font-semibold
+          hover:bg-slate-50 hover:border-slate-300 transition-colors
+        "
       >
-        Open Presenter <ChevronRight size={15} />
+        Open presenter <ChevronRight size={13} />
       </button>
     </div>
   );
 }
 
-function formatPanelTime(p) {
-  const date = p.session_date
-    ? new Date(p.session_date).toLocaleDateString(undefined, {
-        weekday: "short", month: "short", day: "numeric",
-      })
-    : null;
-  const time = p.start_time && p.end_time
-    ? `${p.start_time}–${p.end_time}`
-    : p.start_time;
-  return [date, time, p.room].filter(Boolean).join(" · ") || "Scheduled";
+function formatPanelMeta(p) {
+  const parts = [];
+  if (p.session_date) {
+    parts.push(new Date(p.session_date).toLocaleDateString(undefined, {
+      weekday: "short", month: "short", day: "numeric",
+    }));
+  }
+  if (p.start_time && p.end_time) parts.push(`${p.start_time}–${p.end_time}`);
+  else if (p.start_time) parts.push(p.start_time);
+  if (p.room) parts.push(p.room);
+  return parts.length ? parts : ["Scheduled"];
 }

@@ -121,7 +121,7 @@ export default function Panels() {
             subtitle="Panels appear here automatically when an Agenda session has type 'panel'."
           />
         ) : (
-          <div className="fluid-grid wide">
+          <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
             {panels.map((panel) => (
               <PanelCard
                 key={panel.id}
@@ -151,29 +151,33 @@ export default function Panels() {
   );
 }
 
-// Card-based panel row — replaces the old list row that didn't reflow
-// well on narrow screens. Uses the shared LiveSwitch so the toggle style
-// matches the dashboard + presenter view exactly.
+// Compact panel card — matches the dashboard's PanelCard visual language.
 function PanelCard({ panel, toggling, showMembers, onToggleDiscussion, onManageMembers, onPresent }) {
   const enabled = !!panel.discussion_enabled;
   const qCount = Number(panel.question_count || 0);
   return (
-    <div className="live-card" data-active={enabled || undefined}>
-      <div className="live-card-head">
-        <div className="live-card-head-left" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
-          <div className="live-card-title" style={{ whiteSpace: "normal", fontSize: 15 }}>
+    <div
+      className={`
+        bg-white border rounded-[10px] p-3.5 flex flex-col gap-2.5
+        transition-colors
+        ${enabled ? "border-emerald-500/40" : "border-slate-200"}
+      `}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[13.5px] font-semibold text-slate-900 leading-[1.3] tracking-[-0.005em]">
             {panel.title}
           </div>
-          <div style={{ fontSize: 12.5, color: "var(--text-muted)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[11.5px] text-slate-500 mt-1">
             {panel.session_date && <span>{panel.session_date}</span>}
             {panel.start_time && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                <Clock size={11} /> {panel.start_time}{panel.end_time ? `–${panel.end_time}` : ""}
+              <span className="inline-flex items-center gap-1">
+                <Clock size={10} /> {panel.start_time}{panel.end_time ? `–${panel.end_time}` : ""}
               </span>
             )}
             {panel.room && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                <MapPin size={11} /> {panel.room}
+              <span className="inline-flex items-center gap-1">
+                <MapPin size={10} /> {panel.room}
               </span>
             )}
           </div>
@@ -186,58 +190,61 @@ function PanelCard({ panel, toggling, showMembers, onToggleDiscussion, onManageM
         />
       </div>
 
-      {(panel.speaker_name || panel.moderator || panel.description) && (
-        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, display: "flex", flexDirection: "column", gap: 4 }}>
+      {(panel.speaker_name || panel.moderator) && (
+        <div className="text-[11.5px] text-slate-500 leading-[1.5] flex flex-col gap-0.5">
           {panel.speaker_name && (
-            <div style={{ color: "var(--navy)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Mic2 size={12} /> {panel.speaker_name}
+            <div className="text-[#0F2D5E] font-medium inline-flex items-center gap-1.5">
+              <Mic2 size={11} /> {panel.speaker_name}
             </div>
           )}
           {panel.moderator && (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <UserIcon size={12} /> {panel.moderator}
-            </div>
-          )}
-          {panel.description && (
-            <div style={{
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              color: "var(--text-subtle)",
-            }}>
-              {panel.description}
+            <div className="inline-flex items-center gap-1.5">
+              <UserIcon size={11} /> {panel.moderator}
             </div>
           )}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <LiveChip icon={MessageSquare} compact>
+      {panel.description && (
+        <div className="text-[11.5px] text-slate-400 leading-[1.5] line-clamp-2">
+          {panel.description}
+        </div>
+      )}
+
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <LiveChip icon={MessageSquare}>
           <SmoothCount value={qCount} /> {qCount === 1 ? "question" : "questions"}
         </LiveChip>
-        <LiveChip icon={Users} compact tone="navy">
+        <LiveChip tone="navy" icon={Users}>
           {panel.member_count || 0} members
         </LiveChip>
-        {!enabled && <LiveChip tone="danger" compact>Closed</LiveChip>}
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+      <div className="flex items-center gap-1.5">
         <button
-          className="btn-primary"
           onClick={onPresent}
-          style={{ flex: 1, justifyContent: "center", minHeight: 44 }}
+          className="
+            flex-1 inline-flex items-center justify-center gap-1.5
+            h-9 px-3 rounded-md
+            border border-slate-200 text-slate-900 text-[12.5px] font-semibold
+            hover:bg-slate-50 hover:border-slate-300 transition-colors
+          "
         >
-          Open Presenter <ChevronRight size={14} />
+          Open presenter <ChevronRight size={13} />
         </button>
         {showMembers && (
-          <IconBtn
-            Icon={UsersRound}
-            color="#0F2D5E"
-            bg="#eef2ff"
-            title="Manage panel members"
+          <button
             onClick={onManageMembers}
-          />
+            title="Manage panel members"
+            className="
+              shrink-0 w-9 h-9 rounded-md
+              border border-slate-200 text-slate-600
+              hover:bg-slate-50 hover:border-slate-300 transition-colors
+              inline-flex items-center justify-center
+            "
+          >
+            <UsersRound size={14} />
+          </button>
         )}
       </div>
     </div>

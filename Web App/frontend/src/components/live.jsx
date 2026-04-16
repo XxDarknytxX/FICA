@@ -1,39 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 /**
- * Shared "live" UI primitives used by every moderator-facing page.
+ * Shared primitives for the moderator + admin surface.
  *
- * The goal is one set of controls with one visual language — the same
- * chunky pill switch on the dashboard, the panels list, and the
- * presenter view; the same stat tile shape on the dashboard and the
- * projects/voting page; the same connection indicator everywhere a WS
- * feed is in play.
- *
- * Everything in this file is plain CSS-in-style — no external deps — so
- * the components drop cleanly into any of the moderator pages without
- * pulling the existing ticket-system ui.jsx along for the ride.
+ * Tailwind-only (v4). Restrained, data-first: no drop-shadows, 1px
+ * borders, small type, compact spacing. The iOS-style LiveSwitch has
+ * no text inside — the pill colour + thumb position communicate state.
  */
 
-// ─── LiveSwitch ─────────────────────────────────────────────────────────
-// The canonical moderator toggle. One source of truth so the dashboard
-// and the presenter view behave the same way. Optimistically flips; the
-// parent is responsible for reverting on API failure.
+// ─── LiveSwitch — classic iOS pill ────────────────────────────────────
 export function LiveSwitch({
   checked,
   onChange,
   disabled = false,
-  labelOn = "Open",
-  labelOff = "Closed",
-  size = "md",    // "sm" | "md" | "lg"
+  size = "md",   // "sm" | "md"
   ariaLabel,
 }) {
-  const metrics = {
-    sm: { w: 48, h: 28, font: 10 },
-    md: { w: 64, h: 36, font: 11 },
-    lg: { w: 80, h: 46, font: 12 },
-  }[size] || { w: 64, h: 36, font: 11 };
-
+  const sm = size === "sm";
+  const track = sm ? "w-8 h-[18px]" : "w-10 h-[22px]";
+  const thumb = sm
+    ? "w-[14px] h-[14px] data-[on]:translate-x-[14px]"
+    : "w-[18px] h-[18px] data-[on]:translate-x-[18px]";
   return (
     <button
       type="button"
@@ -42,170 +30,154 @@ export function LiveSwitch({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className="live-switch"
-      data-checked={checked}
-      style={{
-        "--w": `${metrics.w}px`,
-        "--h": `${metrics.h}px`,
-      }}
+      data-on={checked || undefined}
+      className={`
+        relative inline-flex shrink-0 items-center rounded-full p-[2px]
+        ${track}
+        bg-slate-300 data-[on]:bg-emerald-500
+        transition-colors duration-200
+        disabled:opacity-45 disabled:cursor-not-allowed
+        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500
+      `}
     >
       <span
-        className="live-switch-label"
-        style={{ fontSize: metrics.font }}
-        aria-hidden="true"
-      >
-        {checked ? labelOn : labelOff}
-      </span>
+        data-on={checked || undefined}
+        className={`
+          block rounded-full bg-white shadow-[0_1px_2px_rgb(15_23_42/0.2)]
+          transition-transform duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]
+          ${thumb}
+        `}
+      />
     </button>
   );
 }
 
-// ─── LiveDot ────────────────────────────────────────────────────────────
-// Connection status pill used on any page subscribing to /ws.
+// ─── LiveDot — connection indicator ────────────────────────────────────
 export function LiveDot({ connected, label }) {
   return (
     <span
-      className="live-dot"
-      data-on={connected}
-      title={connected ? "Live — receiving updates" : "Offline — reconnecting"}
+      title={connected ? "Receiving live updates" : "Reconnecting..."}
+      className={`
+        inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full
+        text-[11px] font-semibold align-middle
+        ${connected
+          ? "bg-emerald-500/12 text-emerald-700"
+          : "bg-slate-500/10 text-slate-500"}
+      `}
     >
-      <span className="live-dot-bulb" aria-hidden="true" />
+      <span className="relative w-1.5 h-1.5 rounded-full bg-current shrink-0">
+        {connected && (
+          <span className="absolute -inset-[3px] rounded-full bg-current opacity-50 animate-live-pulse" />
+        )}
+      </span>
       {label ?? (connected ? "Live" : "Offline")}
     </span>
   );
 }
 
-// ─── LiveBadge ──────────────────────────────────────────────────────────
-// Rounded count chip — optional pulse animation when count > 0.
-export function LiveBadge({ count, tone = "gold", pulse = true }) {
+// ─── LiveBadge ─────────────────────────────────────────────────────────
+export function LiveBadge({ count, tone = "accent", pulse = false }) {
   if (!count) return null;
+  const toneCls = {
+    accent: "bg-[#C8A951] text-[#091f42]",
+    navy:   "bg-[#0F2D5E] text-white",
+    danger: "bg-red-500 text-white",
+  }[tone];
   return (
-    <span className="live-badge" data-tone={tone} data-pulse={pulse || undefined}>
+    <span
+      className={`
+        inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5
+        rounded-full text-[10.5px] font-bold leading-none
+        ${toneCls}
+        ${pulse ? "shadow-[0_0_0_0_rgb(200_169_81/0.55)] animate-pulse" : ""}
+      `}
+    >
       {count}
     </span>
   );
 }
 
-// ─── StatTile ───────────────────────────────────────────────────────────
-// Flat stat card used on dashboards. Accepts an icon + label + number.
-export function StatTile({ icon: Icon, label, value, tone = "neutral", hint }) {
+// ─── Chip — small muted label ──────────────────────────────────────────
+export function Chip({ children, tone = "neutral", icon: Icon }) {
+  const toneCls = {
+    neutral: "bg-slate-100 text-slate-600",
+    accent:  "bg-[#C8A951]/15 text-[#8a6d1d]",
+    navy:    "bg-[#0F2D5E]/8 text-[#0F2D5E]",
+    success: "bg-emerald-500/12 text-emerald-700",
+    danger:  "bg-red-500/12 text-red-700",
+    muted:   "bg-transparent text-slate-400 px-0",
+  }[tone] || "bg-slate-100 text-slate-600";
   return (
-    <div className="stat-tile" data-tone={tone}>
-      <div className="stat-tile-icon">
-        {Icon && <Icon size={18} strokeWidth={2} />}
-      </div>
-      <div className="stat-tile-body">
-        <div className="stat-tile-label">{label}</div>
-        <div className="stat-tile-value">{value}</div>
-        {hint && <div className="stat-tile-hint">{hint}</div>}
-      </div>
-    </div>
-  );
-}
-
-// ─── ToggleCard ─────────────────────────────────────────────────────────
-// The chunky toggle card used for voting / panel discussion switches on
-// the moderator dashboard. `action` lets you stack a button below.
-export function ToggleCard({
-  icon: Icon,
-  title,
-  subtitle,
-  checked,
-  onToggle,
-  disabled = false,
-  labelOn = "Open",
-  labelOff = "Closed",
-  children,                     // optional action area below the subtitle
-}) {
-  return (
-    <div className="live-card" data-active={checked || undefined}>
-      <div className="live-card-head">
-        <div className="live-card-head-left">
-          {Icon && (
-            <div className="live-card-icon">
-              <Icon size={18} strokeWidth={2} />
-            </div>
-          )}
-          <div className="live-card-title">{title}</div>
-        </div>
-        <LiveSwitch
-          checked={checked}
-          onChange={onToggle}
-          disabled={disabled}
-          labelOn={labelOn}
-          labelOff={labelOff}
-          ariaLabel={title}
-        />
-      </div>
-      {subtitle && <div className="live-card-sub">{subtitle}</div>}
-      {children}
-    </div>
-  );
-}
-
-// ─── ActionCard ─────────────────────────────────────────────────────────
-// Card that behaves like a button (quick link).
-export function ActionCard({ icon: Icon, title, subtitle, onClick, badge }) {
-  return (
-    <button type="button" className="live-card live-card-action" onClick={onClick}>
-      <div className="live-card-head">
-        <div className="live-card-head-left">
-          {Icon && (
-            <div className="live-card-icon">
-              <Icon size={18} strokeWidth={2} />
-            </div>
-          )}
-          <div className="live-card-title">{title}</div>
-        </div>
-        <ChevronRightIcon />
-      </div>
-      {subtitle && <div className="live-card-sub">{subtitle}</div>}
-      {badge && <div className="live-card-badge-row">{badge}</div>}
-    </button>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  );
-}
-
-// ─── Chip ───────────────────────────────────────────────────────────────
-// Small label chip (e.g. "12 questions", "3 unread", "Day 1").
-export function Chip({ children, tone = "neutral", icon: Icon, compact = false }) {
-  return (
-    <span className="live-chip" data-tone={tone} data-compact={compact || undefined}>
-      {Icon && <Icon size={compact ? 11 : 12} strokeWidth={2.2} />}
+    <span
+      className={`
+        inline-flex items-center gap-1 px-2 py-[2px] rounded-md
+        text-[11.5px] font-medium leading-[1.5] whitespace-nowrap
+        ${toneCls}
+      `}
+    >
+      {Icon && <Icon size={11} strokeWidth={2.2} />}
       {children}
     </span>
   );
 }
 
-// ─── PageTitle ──────────────────────────────────────────────────────────
-// Standard page header used on every moderator + admin page. Accepts a
-// live dot + right-aligned action slot.
-export function PageTitle({ title, subtitle, right, connected }) {
+// ─── StatTile ──────────────────────────────────────────────────────────
+export function StatTile({ label, value, hint, accent = false }) {
   return (
-    <div className="page-title">
-      <div className="page-title-left">
-        <h1 className="page-title-h1">
-          {title}
-          {typeof connected === "boolean" && (
-            <LiveDot connected={connected} />
-          )}
-        </h1>
-        {subtitle && <p className="page-title-sub">{subtitle}</p>}
+    <div
+      className={`
+        bg-white border rounded-[10px] p-[12px_14px]
+        ${accent
+          ? "border-[#C8A951]/50 bg-gradient-to-b from-[#C8A951]/5 to-transparent"
+          : "border-slate-200"}
+      `}
+    >
+      <div className="text-[11px] font-medium text-slate-500">{label}</div>
+      <div className="text-[22px] font-bold text-slate-900 leading-[1.15] mt-[2px] tracking-[-0.02em]">
+        {value}
       </div>
-      {right && <div className="page-title-right">{right}</div>}
+      {hint && <div className="text-[11px] text-slate-400 mt-[3px] leading-[1.4]">{hint}</div>}
     </div>
   );
 }
 
-// ─── Spinner + inline loader ────────────────────────────────────────────
-export function Spinner({ size = 16 }) {
+// ─── PageTitle ─────────────────────────────────────────────────────────
+export function PageTitle({ title, subtitle, right, connected }) {
+  return (
+    <div className="flex items-start justify-between gap-[14px] mb-[18px] flex-wrap">
+      <div className="min-w-0 flex-1">
+        <h1 className="m-0 text-[19px] font-bold tracking-[-0.018em] text-slate-900 leading-[1.25] flex items-center gap-[10px] flex-wrap">
+          {title}
+          {typeof connected === "boolean" && <LiveDot connected={connected} />}
+        </h1>
+        {subtitle && (
+          <p className="mt-[4px] text-slate-500 text-[13px] leading-[1.5]">{subtitle}</p>
+        )}
+      </div>
+      {right && <div className="flex items-center gap-2 flex-wrap">{right}</div>}
+    </div>
+  );
+}
+
+// ─── SmoothCount — subtle bump on value change ────────────────────────
+export function SmoothCount({ value }) {
+  const [display, setDisplay] = useState(value);
+  const [key, setKey] = useState(0);
+  const prev = useRef(value);
+  useEffect(() => {
+    if (prev.current === value) return;
+    prev.current = value;
+    setDisplay(value);
+    setKey((k) => k + 1);
+  }, [value]);
+  return (
+    <span key={key} className="inline-block animate-count-bump">
+      {display}
+    </span>
+  );
+}
+
+export function Spinner({ size = 14 }) {
   return (
     <RefreshCw
       size={size}
@@ -215,23 +187,3 @@ export function Spinner({ size = 16 }) {
     />
   );
 }
-
-// ─── Smooth-count ──────────────────────────────────────────────────────
-// Animates a number change with a brief pulse. Feels more "live" than a
-// hard swap when a toggle flips or a question count bumps.
-export function SmoothCount({ value }) {
-  const [display, setDisplay] = useState(value);
-  const [bumped, setBumped] = useState(false);
-  const prev = useRef(value);
-  useEffect(() => {
-    if (prev.current === value) return;
-    prev.current = value;
-    setDisplay(value);
-    setBumped(true);
-    const t = setTimeout(() => setBumped(false), 380);
-    return () => clearTimeout(t);
-  }, [value]);
-  return <span className="smooth-count" data-bumped={bumped || undefined}>{display}</span>;
-}
-
-export { Wifi, WifiOff };

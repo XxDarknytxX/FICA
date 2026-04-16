@@ -208,8 +208,7 @@ export default function Projects() {
             />
           ) : (
             <div
-              className="fluid-grid wide"
-              style={{ gap: 14 }}
+              className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
             >
               {projects.map(p => (
                 <ProjectCard
@@ -531,60 +530,52 @@ function VotingControlCenter({
   onRequestToggleVoting, onToggleResults,
 }) {
   return (
-    <div className="fluid-grid" style={{ marginBottom: 16 }}>
-      <div className="live-card" data-active={votingOpen || undefined}>
-        <div className="live-card-head">
-          <div className="live-card-head-left">
-            <div className="live-card-icon">
-              <Power size={18} />
-            </div>
-            <div className="live-card-title">Voting</div>
-          </div>
-          <LiveSwitch
-            checked={!!votingOpen}
-            onChange={() => onRequestToggleVoting()}
-            labelOn="Open"
-            labelOff="Closed"
-            ariaLabel="Voting"
-          />
-        </div>
-        <div className="live-card-sub">
-          {votingOpen
-            ? "Delegates can cast and change votes."
-            : "Delegates cannot vote right now."}
-        </div>
-      </div>
-
-      <div className="live-card" data-active={resultsVisible || undefined}>
-        <div className="live-card-head">
-          <div className="live-card-head-left">
-            <div className="live-card-icon">
-              {resultsVisible ? <Eye size={18} /> : <EyeOff size={18} />}
-            </div>
-            <div className="live-card-title">Show results</div>
-          </div>
-          <LiveSwitch
-            checked={!!resultsVisible}
-            onChange={() => onToggleResults()}
-            labelOn="Shown"
-            labelOff="Hidden"
-            ariaLabel="Show results to delegates"
-          />
-        </div>
-        <div className="live-card-sub">
-          {resultsVisible
-            ? "Delegates can see the live tally."
-            : "Delegates only see their own vote — admins still see the leaderboard."}
-        </div>
-      </div>
-
+    <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-4">
+      <VotingToggleRow
+        icon={Power}
+        title="Voting"
+        hint={votingOpen ? "Delegates can cast votes" : "Ballot is closed"}
+        checked={!!votingOpen}
+        onToggle={() => onRequestToggleVoting()}
+      />
+      <VotingToggleRow
+        icon={resultsVisible ? Eye : EyeOff}
+        title="Show results"
+        hint={resultsVisible ? "Tally visible to delegates" : "Hidden from delegates"}
+        checked={!!resultsVisible}
+        onToggle={() => onToggleResults()}
+      />
       <StatTile
-        icon={Users}
         label="Votes cast"
         value={<SmoothCount value={totalVotes} />}
         hint={`of ${totalDelegates} eligible · ${participation}% turnout`}
-        tone={participation >= 50 ? "navy" : undefined}
       />
+    </div>
+  );
+}
+
+function VotingToggleRow({ icon: Icon, title, hint, checked, onToggle, disabled }) {
+  return (
+    <div
+      className={`
+        bg-white border rounded-[10px] px-3.5 py-3 flex items-center justify-between gap-3
+        transition-colors
+        ${checked ? "border-emerald-500/40" : "border-slate-200"}
+      `}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`
+          w-8 h-8 rounded-lg flex items-center justify-center shrink-0
+          ${checked ? "bg-emerald-500/12 text-emerald-700" : "bg-slate-100 text-slate-500"}
+        `}>
+          <Icon size={15} strokeWidth={2} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-slate-900 leading-tight">{title}</div>
+          <div className="text-[11.5px] text-slate-500 leading-[1.4] mt-0.5 truncate">{hint}</div>
+        </div>
+      </div>
+      <LiveSwitch checked={checked} onChange={onToggle} disabled={disabled} ariaLabel={title} />
     </div>
   );
 }
