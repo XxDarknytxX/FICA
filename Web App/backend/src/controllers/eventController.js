@@ -979,8 +979,24 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   };
 
   // ─── MESSAGES ─────────────────────────────────────────────────────────────
+  // Role-aware: admins can pass any attendeeId (or omit for firehose); a
+  // delegate token is forced to filter on its own attendee id, regardless of
+  // what the client sent. Without this, any delegate could list every DM in
+  // the system just by omitting the query param.
   const getMessages = async (req, res) => {
-    const { attendeeId } = req.query;
+    const isAdmin = req.user?.role === "admin";
+    let attendeeId = req.query.attendeeId;
+    if (!isAdmin) {
+      // Force delegate callers to their own id. Reject mismatched query hints
+      // so a tampered client can't pretend it asked for itself.
+      const selfId = String(req.user?.id || "");
+      if (attendeeId && String(attendeeId) !== selfId) {
+        return send.forbidden
+          ? send.forbidden(res, "Can only list your own messages")
+          : res.status(403).json({ error: "Can only list your own messages" });
+      }
+      attendeeId = selfId;
+    }
     try {
       let query = `
         SELECT m.*,
@@ -1004,9 +1020,20 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Delegates may only read a conversation they're a party to. Admins can
+  // read any two attendees' thread. The mark-as-read side-effect is only
+  // applied when the caller is the receiver (`a`), preventing a delegate
+  // from flipping read flags on someone else's behalf.
   const getConversation = async (req, res) => {
     const { a, b } = req.query;
     if (!a || !b) return send.bad(res, "Provide attendee ids a and b");
+    const isAdmin = req.user?.role === "admin";
+    if (!isAdmin) {
+      const selfId = String(req.user?.id || "");
+      if (String(a) !== selfId && String(b) !== selfId) {
+        return res.status(403).json({ error: "Can only read your own conversations" });
+      }
+    }
     try {
       const [rows] = await pool.query(`
         SELECT m.*,
@@ -1018,11 +1045,14 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
         WHERE (m.sender_id=? AND m.receiver_id=?) OR (m.sender_id=? AND m.receiver_id=?)
         ORDER BY m.sent_at ASC
       `, [a, b, b, a]);
-      // Mark as read
-      await pool.query(
-        "UPDATE messages SET is_read=TRUE WHERE receiver_id=? AND sender_id=? AND is_read=FALSE",
-        [a, b]
-      );
+      // Only mark as read on behalf of the caller (the `a` side). Admin peeks
+      // don't alter read state.
+      if (!isAdmin && String(a) === String(req.user?.id)) {
+        await pool.query(
+          "UPDATE messages SET is_read=TRUE WHERE receiver_id=? AND sender_id=? AND is_read=FALSE",
+          [a, b]
+        );
+      }
       return send.ok(res, { messages: rows });
     } catch (e) {
       console.error(e);
@@ -1030,13 +1060,17 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Delegates can only mark messages addressed to themselves as read.
+  // `reader_id` from the request body is ignored for delegate callers.
   const markAsRead = async (req, res) => {
-    const { reader_id, sender_id } = req.body;
-    if (!reader_id || !sender_id) return send.bad(res, "reader_id and sender_id are required");
+    const isAdmin = req.user?.role === "admin";
+    const readerId = isAdmin ? req.body.reader_id : req.user?.id;
+    const { sender_id } = req.body;
+    if (!readerId || !sender_id) return send.bad(res, "reader_id and sender_id are required");
     try {
       await pool.query(
         "UPDATE messages SET is_read=TRUE WHERE receiver_id=? AND sender_id=? AND is_read=FALSE",
-        [reader_id, sender_id]
+        [readerId, sender_id]
       );
       return send.ok(res, { success: true });
     } catch (e) {
@@ -1045,10 +1079,16 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Delegate sender_id is always taken from the verified JWT — the request
+  // body's sender_id is ignored. Admins may impersonate (e.g. for support /
+  // system-broadcast tooling) by passing sender_id explicitly. This closes
+  // the "POST to /api/delegate/messages with sender_id=<anyone>" IDOR.
   const sendMessage = async (req, res) => {
-    const { sender_id, receiver_id, subject, body } = req.body;
+    const isAdmin = req.user?.role === "admin";
+    const sender_id = isAdmin ? (req.body.sender_id ?? req.user?.id) : req.user?.id;
+    const { receiver_id, subject, body } = req.body;
     if (!sender_id || !receiver_id || !body) return send.bad(res, "sender_id, receiver_id, body are required");
-    if (sender_id === receiver_id) return send.bad(res, "Cannot message yourself");
+    if (String(sender_id) === String(receiver_id)) return send.bad(res, "Cannot message yourself");
     try {
       const [result] = await pool.query(
         "INSERT INTO messages (sender_id, receiver_id, subject, body) VALUES (?,?,?,?)",
@@ -1077,9 +1117,25 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Delegates can only delete messages they're a party to; admins can
+  // delete any. We look up the row first to check ownership — kept as a
+  // single DELETE with an ownership predicate would race (and wouldn't
+  // let us distinguish 404 from 403).
   const deleteMessage = async (req, res) => {
     const { id } = req.params;
+    const isAdmin = req.user?.role === "admin";
     try {
+      if (!isAdmin) {
+        const [[row]] = await pool.query(
+          "SELECT sender_id, receiver_id FROM messages WHERE id=?",
+          [id]
+        );
+        if (!row) return send.notFound(res, "Message not found");
+        const selfId = Number(req.user?.id);
+        if (Number(row.sender_id) !== selfId && Number(row.receiver_id) !== selfId) {
+          return res.status(403).json({ error: "Cannot delete another user's message" });
+        }
+      }
       const [r] = await pool.query("DELETE FROM messages WHERE id=?", [id]);
       if (r.affectedRows === 0) return send.notFound(res, "Message not found");
       return send.ok(res, { success: true });
@@ -1108,8 +1164,17 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   };
 
   // ─── CONNECTIONS ──────────────────────────────────────────────────────────
+  // Delegates are locked to their own attendee id; admins can list any.
   const getConnections = async (req, res) => {
-    const { attendeeId } = req.query;
+    const isAdmin = req.user?.role === "admin";
+    let attendeeId = req.query.attendeeId;
+    if (!isAdmin) {
+      const selfId = String(req.user?.id || "");
+      if (attendeeId && String(attendeeId) !== selfId) {
+        return res.status(403).json({ error: "Can only list your own connections" });
+      }
+      attendeeId = selfId;
+    }
     try {
       let query = `
         SELECT c.*,
@@ -1133,15 +1198,38 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Only the `requested` party may accept/decline a connection; neither
+  // side may flip a resolved connection back to pending. Admins may set
+  // any status for moderation. Previously a delegate could accept/decline
+  // any connection in the system by id.
   const updateConnectionStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     if (!["pending", "accepted", "declined"].includes(status)) return send.bad(res, "Invalid status");
+    const isAdmin = req.user?.role === "admin";
     try {
-      const [r] = await pool.query("UPDATE connections SET status=? WHERE id=?", [status, id]);
-      if (r.affectedRows === 0) return send.notFound(res, "Connection not found");
-      const [[conn]] = await pool.query("SELECT * FROM connections WHERE id=?", [id]);
-      return send.ok(res, { connection: conn });
+      const [[conn]] = await pool.query(
+        "SELECT id, requester_id, requested_id, status FROM connections WHERE id=?",
+        [id]
+      );
+      if (!conn) return send.notFound(res, "Connection not found");
+
+      if (!isAdmin) {
+        const selfId = Number(req.user?.id);
+        const isRequester = Number(conn.requester_id) === selfId;
+        const isRequested = Number(conn.requested_id) === selfId;
+        if (!isRequester && !isRequested) {
+          return res.status(403).json({ error: "Not a party to this connection" });
+        }
+        // Only the invitee can accept/decline.
+        if ((status === "accepted" || status === "declined") && !isRequested) {
+          return res.status(403).json({ error: "Only the invited user can accept or decline" });
+        }
+      }
+
+      await pool.query("UPDATE connections SET status=? WHERE id=?", [status, id]);
+      const [[updated]] = await pool.query("SELECT * FROM connections WHERE id=?", [id]);
+      return send.ok(res, { connection: updated });
     } catch (e) {
       console.error(e);
       return send.serverErr(res);
@@ -1149,8 +1237,12 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   };
 
   // ─── CREATE CONNECTION ───────────────────────────────────────────────────
+  // Delegate requester_id is forced to the token id. Admins can create a
+  // connection on behalf of any pair (useful for seeding / testing).
   const createConnection = async (req, res) => {
-    const { requester_id, requested_id } = req.body;
+    const isAdmin = req.user?.role === "admin";
+    const requester_id = isAdmin ? (req.body.requester_id ?? req.user?.id) : req.user?.id;
+    const { requested_id } = req.body;
     if (!requester_id || !requested_id) return send.bad(res, "Both requester_id and requested_id required");
     if (String(requester_id) === String(requested_id)) return send.bad(res, "Cannot connect with yourself");
     try {
@@ -1181,9 +1273,23 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   };
 
   // ─── DELETE CONNECTION ──────────────────────────────────────────────────
+  // Delegates can only delete a connection they're a party to. Admins may
+  // delete any connection.
   const deleteConnection = async (req, res) => {
     const { id } = req.params;
+    const isAdmin = req.user?.role === "admin";
     try {
+      if (!isAdmin) {
+        const [[row]] = await pool.query(
+          "SELECT requester_id, requested_id FROM connections WHERE id=?",
+          [id]
+        );
+        if (!row) return send.notFound(res, "Connection not found");
+        const selfId = Number(req.user?.id);
+        if (Number(row.requester_id) !== selfId && Number(row.requested_id) !== selfId) {
+          return res.status(403).json({ error: "Not a party to this connection" });
+        }
+      }
       const [r] = await pool.query("DELETE FROM connections WHERE id=?", [id]);
       if (r.affectedRows === 0) return send.notFound(res, "Connection not found");
       return send.ok(res, { success: true });
@@ -1265,8 +1371,17 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   };
 
   // ─── MEETINGS CRUD ──────────────────────────────────────────────────────
+  // Delegates are locked to meetings they're a party to; admins see all.
   const getMeetings = async (req, res) => {
-    const { attendeeId } = req.query;
+    const isAdmin = req.user?.role === "admin";
+    let attendeeId = req.query.attendeeId;
+    if (!isAdmin) {
+      const selfId = String(req.user?.id || "");
+      if (attendeeId && String(attendeeId) !== selfId) {
+        return res.status(403).json({ error: "Can only list your own meetings" });
+      }
+      attendeeId = selfId;
+    }
     try {
       let query = `
         SELECT mt.*,
@@ -1290,8 +1405,12 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Delegate requester_id forced to the token id. Admins can create on
+  // behalf of any attendee (moderation / support).
   const createMeeting = async (req, res) => {
-    const { requester_id, requested_id, title, meeting_date, start_time, end_time, location, notes } = req.body;
+    const isAdmin = req.user?.role === "admin";
+    const requester_id = isAdmin ? (req.body.requester_id ?? req.user?.id) : req.user?.id;
+    const { requested_id, title, meeting_date, start_time, end_time, location, notes } = req.body;
     if (!requester_id || !requested_id) return send.bad(res, "Both requester_id and requested_id required");
     if (String(requester_id) === String(requested_id)) return send.bad(res, "Cannot schedule a meeting with yourself");
     try {
@@ -1315,11 +1434,25 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Delegates may only update meetings they're a party to. Admins may
+  // update any meeting. Previously the id alone let anyone mutate any row.
   const updateMeeting = async (req, res) => {
     const { id } = req.params;
     const { title, meeting_date, start_time, end_time, location, notes, status } = req.body;
     if (status && !["pending", "accepted", "declined", "cancelled"].includes(status)) return send.bad(res, "Invalid status");
+    const isAdmin = req.user?.role === "admin";
     try {
+      if (!isAdmin) {
+        const [[row]] = await pool.query(
+          "SELECT requester_id, requested_id FROM meetings WHERE id=?",
+          [id]
+        );
+        if (!row) return send.notFound(res, "Meeting not found");
+        const selfId = Number(req.user?.id);
+        if (Number(row.requester_id) !== selfId && Number(row.requested_id) !== selfId) {
+          return res.status(403).json({ error: "Not a party to this meeting" });
+        }
+      }
       const fields = [];
       const params = [];
       if (title !== undefined) { fields.push("title=?"); params.push(title); }
@@ -1349,9 +1482,22 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // Delegates may only delete meetings they're a party to; admins any.
   const deleteMeeting = async (req, res) => {
     const { id } = req.params;
+    const isAdmin = req.user?.role === "admin";
     try {
+      if (!isAdmin) {
+        const [[row]] = await pool.query(
+          "SELECT requester_id, requested_id FROM meetings WHERE id=?",
+          [id]
+        );
+        if (!row) return send.notFound(res, "Meeting not found");
+        const selfId = Number(req.user?.id);
+        if (Number(row.requester_id) !== selfId && Number(row.requested_id) !== selfId) {
+          return res.status(403).json({ error: "Not a party to this meeting" });
+        }
+      }
       const [r] = await pool.query("DELETE FROM meetings WHERE id=?", [id]);
       if (r.affectedRows === 0) return send.notFound(res, "Meeting not found");
       return send.ok(res, { success: true });
