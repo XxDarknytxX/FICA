@@ -104,6 +104,10 @@ export function makeEventRouter(controller) {
   r.get("/panel-members/:sessionId", controller.getPanelMembers);
   r.put("/panel-members/:sessionId", controller.setPanelMembers);
 
+  // Panel admin — list + per-panel open/close toggle
+  r.get("/panels", controller.getAdminPanels);
+  r.put("/panels/:id/discussion", controller.togglePanelDiscussion);
+
   return r;
 }
 

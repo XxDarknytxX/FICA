@@ -77,10 +77,19 @@ export async function initEventTables(pool) {
       display_order INT DEFAULT 0,
       congress_year INT DEFAULT 2026,
       session_group VARCHAR(50),
+      discussion_enabled BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (speaker_id) REFERENCES speakers(id) ON DELETE SET NULL
     )
   `);
+  // discussion_enabled is a per-panel open/close flag. Older databases
+  // created before this column existed won't get it from CREATE TABLE IF
+  // NOT EXISTS, so add it idempotently here.
+  try {
+    await pool.query("ALTER TABLE sessions ADD COLUMN discussion_enabled BOOLEAN DEFAULT TRUE");
+  } catch (e) {
+    if (!String(e.message || "").includes("Duplicate column")) throw e;
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sponsors (
@@ -1696,10 +1705,10 @@ export function makeEventController(pool, broadcastToUser = null) {
   };
 
   // ─── PANEL DISCUSSION (Delegate) ─────────────────────────────────────────
-  // Lists every session with type='panel' for the given congress year, with
-  // the attendee's own "am I on this panel?" flag + the current question
-  // count, plus the global panel_discussion_enabled toggle so the mobile UI
-  // can disable its composer without a second fetch.
+  // Lists every session with type='panel' for the given congress year.
+  // Each panel now carries its own `discussion_enabled` flag (per-panel
+  // open/close) so the admin can run multiple panels and toggle each one
+  // independently.
   const getPanels = async (req, res) => {
     const attendeeId = req.user.id;
     const year = req.query.year ? parseInt(req.query.year) : null;
@@ -1722,11 +1731,18 @@ export function makeEventController(pool, broadcastToUser = null) {
       if (year) { sql += " AND s.congress_year = ?"; params.push(year); }
       sql += " ORDER BY s.session_date ASC, s.start_time ASC";
       const [rows] = await pool.query(sql, params);
-      // Coerce the correlated subquery result (null vs 1) into a plain 0/1.
-      const panels = rows.map(r => ({ ...r, is_panel_member: r.is_panel_member ? 1 : 0 }));
-      const [settingRow] = await pool.query("SELECT setting_value FROM event_settings WHERE setting_key='panel_discussion_enabled'");
-      const panel_discussion_enabled = settingRow.length === 0 || settingRow[0].setting_value === "true";
-      return send.ok(res, { panels, panel_discussion_enabled });
+      // Coerce the correlated subquery result (null vs 1) into a plain 0/1,
+      // and the TINYINT discussion_enabled into a real boolean.
+      const panels = rows.map(r => ({
+        ...r,
+        is_panel_member: r.is_panel_member ? 1 : 0,
+        discussion_enabled: r.discussion_enabled == null ? true : Boolean(r.discussion_enabled),
+      }));
+      // panel_discussion_enabled is kept in the response as a convenience
+      // master-switch that's always true now — individual panels are gated
+      // through their own `discussion_enabled` field instead. Existing mobile
+      // builds that read the master flag continue to work unchanged.
+      return send.ok(res, { panels, panel_discussion_enabled: true });
     } catch (e) {
       console.error(e);
       return send.serverErr(res);
@@ -1765,8 +1781,8 @@ export function makeEventController(pool, broadcastToUser = null) {
     }
   };
 
-  // Post a new question. Gated by the panel_discussion_enabled setting so
-  // admins can close questions with a single toggle.
+  // Post a new question. Gated by the per-panel `discussion_enabled` flag
+  // so each panel can be independently opened/closed by admins.
   const postPanelQuestion = async (req, res) => {
     const attendeeId = req.user.id;
     const { id } = req.params;
@@ -1774,11 +1790,15 @@ export function makeEventController(pool, broadcastToUser = null) {
     if (!question) return send.bad(res, "Question is required");
     if (question.length > 1000) return send.bad(res, "Question is too long (max 1000 characters)");
     try {
-      const [settingRow] = await pool.query("SELECT setting_value FROM event_settings WHERE setting_key='panel_discussion_enabled'");
-      const enabled = settingRow.length === 0 || settingRow[0].setting_value === "true";
-      if (!enabled) return send.bad(res, "Panel discussion is currently closed");
-      const [[panel]] = await pool.query("SELECT id FROM sessions WHERE id=? AND type='panel'", [id]);
+      const [[panel]] = await pool.query(
+        "SELECT id, discussion_enabled FROM sessions WHERE id=? AND type='panel'",
+        [id]
+      );
       if (!panel) return send.notFound(res, "Panel not found");
+      // discussion_enabled is TINYINT(1) in MySQL; treat null as open so
+      // pre-existing panel rows default to open until the admin closes them.
+      const enabled = panel.discussion_enabled == null ? true : Boolean(panel.discussion_enabled);
+      if (!enabled) return send.bad(res, "This panel's discussion is currently closed");
       const [result] = await pool.query(
         "INSERT INTO panel_questions (session_id, attendee_id, question) VALUES (?, ?, ?)",
         [id, attendeeId, question]
@@ -1843,6 +1863,59 @@ export function makeEventController(pool, broadcastToUser = null) {
     }
   };
 
+  // Admin-facing list of every panel session for the dedicated "Panels"
+  // admin page. Includes question count, member count, and the per-panel
+  // discussion_enabled flag — everything needed to render the row-per-panel
+  // list with toggles and "manage members" buttons.
+  const getAdminPanels = async (req, res) => {
+    const year = req.query.year ? parseInt(req.query.year) : null;
+    try {
+      const params = [];
+      let sql = `
+        SELECT
+          s.*,
+          DATE_FORMAT(s.session_date, '%Y-%m-%d') AS session_date,
+          sp.name AS speaker_name,
+          sp.title AS speaker_title,
+          sp.organization AS speaker_org,
+          (SELECT COUNT(*) FROM panel_questions pq WHERE pq.session_id = s.id) AS question_count,
+          (SELECT COUNT(*) FROM panel_members pm WHERE pm.session_id = s.id) AS member_count
+        FROM sessions s
+        LEFT JOIN speakers sp ON s.speaker_id = sp.id
+        WHERE s.type = 'panel'
+      `;
+      if (year) { sql += " AND s.congress_year = ?"; params.push(year); }
+      sql += " ORDER BY s.session_date ASC, s.start_time ASC";
+      const [rows] = await pool.query(sql, params);
+      const panels = rows.map(r => ({
+        ...r,
+        discussion_enabled: r.discussion_enabled == null ? true : Boolean(r.discussion_enabled),
+      }));
+      return send.ok(res, { panels });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // Flip a single panel's discussion open/closed. Body: { enabled: bool }.
+  const togglePanelDiscussion = async (req, res) => {
+    const { id } = req.params;
+    const enabled = req.body?.enabled;
+    if (typeof enabled !== "boolean") return send.bad(res, "enabled (boolean) is required");
+    try {
+      const [r] = await pool.query(
+        "UPDATE sessions SET discussion_enabled=? WHERE id=? AND type='panel'",
+        [enabled ? 1 : 0, id]
+      );
+      if (r.affectedRows === 0) return send.notFound(res, "Panel not found");
+      return send.ok(res, { id: parseInt(id), discussion_enabled: enabled });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
   return {
     getStats: getStatsNew,
     getSpeakers, createSpeaker, updateSpeaker, deleteSpeaker,
@@ -1875,5 +1948,6 @@ export function makeEventController(pool, broadcastToUser = null) {
     // Panel Discussion
     getPanels, getPanelQuestions, postPanelQuestion,
     getPanelMembers, setPanelMembers,
+    getAdminPanels, togglePanelDiscussion,
   };
 }
