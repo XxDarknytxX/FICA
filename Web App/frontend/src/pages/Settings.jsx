@@ -35,10 +35,10 @@ const SETTING_FIELDS = [
     group: "App Configuration",
     icon: Smartphone,
     fields: [
-      { key: "registration_open", label: "Registration Open", placeholder: "true or false", type: "text" },
-      { key: "mobile_app_enabled", label: "Mobile App Enabled", placeholder: "true or false", type: "text" },
-      { key: "voting_open", label: "Voting Open", placeholder: "true or false", type: "text" },
-      { key: "panel_discussion_enabled", label: "Panel Discussions Open", placeholder: "true or false", type: "text", hint: "When \"false\", delegates can view panel questions but cannot post new ones." },
+      { key: "registration_open", label: "Registration Open", type: "bool", hint: "Controls whether new delegate accounts can self-register." },
+      { key: "mobile_app_enabled", label: "Mobile App Enabled", type: "bool", hint: "Master kill-switch for the iOS + Android apps." },
+      { key: "voting_open", label: "Voting Open", type: "bool", hint: "When on, delegates can cast / change their vote for the best project." },
+      { key: "panel_discussion_enabled", label: "Panel Discussions Open", type: "bool", hint: "When off, delegates see panel questions but cannot post new ones." },
     ]
   },
 ];
@@ -75,6 +75,17 @@ export default function Settings() {
 
   function set(key) {
     return (e) => setSettings(s => ({ ...s, [key]: e.target.value }));
+  }
+
+  // Stored in event_settings as "true" / "false" strings so everything
+  // (backend, mobile, other admin pages that read voting_open) keeps its
+  // existing contract. This UI toggle just maps that string ↔ boolean.
+  function setBool(key, nextValue) {
+    setSettings(s => ({ ...s, [key]: nextValue ? "true" : "false" }));
+  }
+  function isOn(key) {
+    const v = settings[key];
+    return v === "true" || v === true;
   }
 
   async function save() {
@@ -147,19 +158,29 @@ export default function Settings() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
                   {fields.map(f => (
-                    <div key={f.key}>
-                      <label className="label">{f.label}</label>
-                      <input
-                        className="input"
-                        type={f.type}
-                        value={settings[f.key] || ""}
-                        onChange={set(f.key)}
-                        placeholder={f.placeholder}
+                    f.type === "bool" ? (
+                      <ToggleRow
+                        key={f.key}
+                        label={f.label}
+                        hint={f.hint}
+                        checked={isOn(f.key)}
+                        onChange={(v) => setBool(f.key, v)}
                       />
-                      {f.hint && (
-                        <div style={{ fontSize: 11, color: "#718096", marginTop: 4 }}>{f.hint}</div>
-                      )}
-                    </div>
+                    ) : (
+                      <div key={f.key}>
+                        <label className="label">{f.label}</label>
+                        <input
+                          className="input"
+                          type={f.type}
+                          value={settings[f.key] || ""}
+                          onChange={set(f.key)}
+                          placeholder={f.placeholder}
+                        />
+                        {f.hint && (
+                          <div style={{ fontSize: 11, color: "#718096", marginTop: 4 }}>{f.hint}</div>
+                        )}
+                      </div>
+                    )
                   ))}
                 </div>
               </div>
@@ -308,5 +329,61 @@ export default function Settings() {
         )}
       </div>
     </Layout>
+  );
+}
+
+/**
+ * iOS-style toggle switch for boolean settings. Renders the label + hint on
+ * the left and a track/thumb switch on the right; click anywhere on the row
+ * to toggle. Backed by a "true" / "false" string in event_settings (see
+ * `setBool` above) so nothing else in the app needs to change.
+ */
+function ToggleRow({ label, hint, checked, onChange }) {
+  return (
+    <label
+      style={{
+        display: "flex", alignItems: "center", gap: 14,
+        padding: "12px 14px",
+        border: "1px solid #e2e8f0",
+        background: "#f8fafc",
+        borderRadius: 12,
+        cursor: "pointer",
+        userSelect: "none",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{label}</div>
+        {hint && (
+          <div style={{ fontSize: 11, color: "#718096", marginTop: 3 }}>{hint}</div>
+        )}
+      </div>
+      <input
+        type="checkbox"
+        checked={!!checked}
+        onChange={(e) => onChange(e.target.checked)}
+        style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+      />
+      <div
+        aria-hidden
+        style={{
+          width: 44, height: 26, borderRadius: 999,
+          background: checked ? "#0F2D5E" : "#cbd5e1",
+          position: "relative",
+          transition: "background 0.15s ease",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 3, left: checked ? 21 : 3,
+            width: 20, height: 20, borderRadius: "50%",
+            background: "white",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+            transition: "left 0.15s ease",
+          }}
+        />
+      </div>
+    </label>
   );
 }
