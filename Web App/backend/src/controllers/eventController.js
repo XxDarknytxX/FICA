@@ -2285,7 +2285,14 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   // One-shot endpoint that returns every toggle + live signal the moderator
   // dashboard needs so the tablet UI can render with a single GET. Beats
   // making the page fan out to five separate endpoints on every refresh.
-  const getModDashboard = async (_req, res) => {
+  //
+  // Optional ?year=N filter — mirrors /api/event/panels so the moderator
+  // dashboard shows the same panel set as the mobile app (which only sees
+  // the active congress year, hardcoded to 2026 on mobile). Without this
+  // filter the dashboard was surfacing legacy test panels from older
+  // congress_year rows, which the mobile app had correctly hidden.
+  const getModDashboard = async (req, res) => {
+    const year = req.query.year ? parseInt(req.query.year) : null;
     try {
       // Voting flags
       const [flagRows] = await pool.query(
@@ -2293,8 +2300,9 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
       );
       const flags = Object.fromEntries(flagRows.map(r => [r.setting_key, r.setting_value]));
 
-      // Panels today + onwards, with live question/pending counts
-      const [panels] = await pool.query(`
+      // Panels for the requested year (or all years if ?year is omitted),
+      // with live question + pending counts per panel.
+      let panelSql = `
         SELECT
           s.id, s.title, s.session_date, s.start_time, s.end_time, s.room,
           s.discussion_enabled,
@@ -2302,8 +2310,11 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
           (SELECT COUNT(*) FROM panel_questions pq WHERE pq.session_id = s.id AND pq.dismissed = FALSE AND pq.moderated_at IS NULL) AS pending_count
         FROM sessions s
         WHERE s.type = 'panel'
-        ORDER BY s.session_date ASC, s.start_time ASC
-      `);
+      `;
+      const panelParams = [];
+      if (year) { panelSql += " AND s.congress_year = ?"; panelParams.push(year); }
+      panelSql += " ORDER BY s.session_date ASC, s.start_time ASC";
+      const [panels] = await pool.query(panelSql, panelParams);
 
       // Headline counts
       const [[{ projectCount }]] = await pool.query(

@@ -35,7 +35,10 @@ export default function ModeratorDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const d = await api("/event/mod-dashboard");
+      // Pin to 2026 for parity with the mobile app + admin Panels page,
+      // which both filter by congress_year. Without this the dashboard
+      // would surface legacy test panels from older year rows.
+      const d = await api("/event/mod-dashboard?year=2026");
       setData(d);
       setErr("");
     } catch (e) {
