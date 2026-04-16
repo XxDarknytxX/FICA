@@ -64,9 +64,13 @@ export function makeAdminController(pool) {
         const ok = await bcrypt.compare(password, user.password_hash);
         if (!ok) return send.bad(res, "Invalid credentials");
 
-        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
-          expiresIn: "2h",
-        });
+        // Admin JWT carries role: "admin" so the new requireAdmin
+        // middleware can distinguish it from delegate tokens.
+        const token = jwt.sign(
+          { id: user.id, email: user.email, role: "admin" },
+          process.env.JWT_SECRET,
+          { expiresIn: "2h" },
+        );
         return send.ok(res, { token });
       } catch (e) {
         console.error(e);

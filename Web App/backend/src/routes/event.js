@@ -1,12 +1,13 @@
 // src/routes/event.js
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 export function makeEventRouter(controller) {
   const r = Router();
 
-  // All admin event routes require admin JWT
-  r.use(requireAuth);
+  // Every admin event route now enforces role === "admin" (previously
+  // only requireAuth, which let delegate tokens through unchallenged).
+  r.use(requireAdmin);
 
   // Stats
   r.get("/stats", controller.getStats);

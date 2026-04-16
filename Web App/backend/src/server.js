@@ -10,6 +10,41 @@ import { makeEventController, initEventTables } from "./controllers/eventControl
 import { makeAuthRouter } from "./routes/auth.js";
 import { makeEventRouter, makeDelegateRouter } from "./routes/event.js";
 
+// ── Startup config validation ───────────────────────────────────────────────
+// Refuse to boot with a missing or obviously-weak JWT_SECRET. A short or
+// default secret means every JWT we issue can be forged trivially, which
+// is a full compromise of both admin and delegate auth.
+(() => {
+  const KNOWN_WEAK = new Set([
+    "dev-secret-change-me",
+    "change-me",
+    "secret",
+    "password",
+    "jwt-secret",
+    "your-secret-here",
+  ]);
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error("FATAL: JWT_SECRET is not set. Refusing to start.");
+    process.exit(1);
+  }
+  if (KNOWN_WEAK.has(secret.trim().toLowerCase())) {
+    console.error("FATAL: JWT_SECRET is a known weak default. Rotate it before starting.");
+    process.exit(1);
+  }
+  if (secret.length < 32) {
+    console.error(`FATAL: JWT_SECRET is too short (${secret.length} chars, need >= 32). Rotate it.`);
+    process.exit(1);
+  }
+  // Soft warnings for common misconfigurations.
+  if (process.env.NODE_ENV === "production") {
+    const origin = process.env.CORS_ORIGIN;
+    if (!origin || origin === "*") {
+      console.warn("WARN: CORS_ORIGIN is unset or '*' in production. Set it to your admin domain.");
+    }
+  }
+})();
+
 const app = express();
 const httpServer = createServer(app);
 

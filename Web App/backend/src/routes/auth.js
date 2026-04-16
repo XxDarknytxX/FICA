@@ -1,13 +1,17 @@
 // src/routes/auth.js
 import { Router } from "express";
 import { body } from "express-validator";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 export function makeAuthRouter(controller, eventController) {
   const router = Router();
 
+  // Admin registration is now admin-only. Bootstrap admin is created
+  // through seed.js. Previously this was public, letting anyone on the
+  // internet create an admin account.
   router.post(
     "/register",
+    requireAdmin,
     [
       body("email").isEmail().withMessage("Valid email required"),
       body("password").isLength({ min: 6 }).withMessage("Password >= 6 chars"),
