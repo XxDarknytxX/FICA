@@ -10,6 +10,7 @@ import Announcements from "./pages/Announcements";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
 import Projects from "./pages/Projects";
+import Panels from "./pages/Panels";
 import ResetPassword from "./pages/ResetPassword";
 
 function ProtectedRoute({ children }) {
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/attendees" element={<Protected><Attendees /></Protected>} />
         <Route path="/announcements" element={<Protected><Announcements /></Protected>} />
         <Route path="/projects" element={<Protected><Projects /></Protected>} />
+        <Route path="/panels" element={<Protected><Panels /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/users" element={<Protected><UserManagement /></Protected>} />
         <Route path="*" element={<Navigate to="/login" replace />} />

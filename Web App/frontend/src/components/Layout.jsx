@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, Mic2, Award, Users, Bell,
   Settings, LogOut, Coffee, ChevronsLeft, ChevronsRight,
-  UserCog, Trophy, Bell as BellIcon, Search,
+  UserCog, Trophy, Bell as BellIcon, Search, MessageSquare,
 } from "lucide-react";
 
 // ─── Sidebar nav structure ───────────────────────────────────────────────
@@ -22,6 +22,7 @@ const navSections = [
       { to: "/sponsors", icon: Award, label: "Sponsors" },
       { to: "/networking", icon: Coffee, label: "Networking" },
       { to: "/announcements", icon: Bell, label: "Announcements" },
+      { to: "/panels", icon: MessageSquare, label: "Panel Discussions" },
     ],
   },
   {

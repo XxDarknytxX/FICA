@@ -38,7 +38,8 @@ const SETTING_FIELDS = [
       { key: "registration_open", label: "Registration Open", type: "bool", hint: "Controls whether new delegate accounts can self-register." },
       { key: "mobile_app_enabled", label: "Mobile App Enabled", type: "bool", hint: "Master kill-switch for the iOS + Android apps." },
       { key: "voting_open", label: "Voting Open", type: "bool", hint: "When on, delegates can cast / change their vote for the best project." },
-      { key: "panel_discussion_enabled", label: "Panel Discussions Open", type: "bool", hint: "When off, delegates see panel questions but cannot post new ones." },
+      // Panel discussions are now gated per-panel — open/close each one from
+      // the "Panel Discussions" page in the sidebar.
     ]
   },
 ];
