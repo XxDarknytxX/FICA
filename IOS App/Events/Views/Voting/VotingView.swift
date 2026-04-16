@@ -6,10 +6,16 @@ struct VotingView: View {
     @State private var hasVoted = false
     @State private var myVoteProjectId: Int? = nil
     @State private var votingOpen = false
+    /// Whether vote tallies are revealed to delegates. When false the
+    /// backend also zeroes out vote_count on every project, so treating
+    /// this purely in UI is safe — no stale data leaks.
+    @State private var resultsVisible = false
     @State private var isVoting = false
     @State private var errorMessage: String? = nil
     @State private var showResults = false
     @State private var selectedProject: Project? = nil
+    @State private var wsOpenToken: UUID?
+    @State private var wsResultsToken: UUID?
 
     private var sortedByVotes: [Project] {
         projects.sorted { ($0.vote_count ?? 0) > ($1.vote_count ?? 0) }
@@ -29,10 +35,18 @@ struct VotingView: View {
                 } else {
                     VStack(spacing: 16) {
                         statusBanner
-                        tabToggle
 
-                        if showResults {
-                            resultsSection
+                        // Hide the Projects/Results tab toggle when
+                        // results aren't public — delegates just see the
+                        // project list. The admin leaderboard is
+                        // unaffected; this is only the delegate view.
+                        if resultsVisible {
+                            tabToggle
+                            if showResults {
+                                resultsSection
+                            } else {
+                                projectsList
+                            }
                         } else {
                             projectsList
                         }
@@ -53,6 +67,8 @@ struct VotingView: View {
             }
             .refreshable { await load() }
             .task { await load() }
+            .onAppear { subscribeLiveUpdates() }
+            .onDisappear { unsubscribeLiveUpdates() }
             .sheet(item: $selectedProject) { project in
                 ProjectDetailSheet(
                     project: project,
@@ -60,6 +76,7 @@ struct VotingView: View {
                     hasVoted: hasVoted,
                     isMyVote: myVoteProjectId == project.id,
                     isVoting: isVoting,
+                    resultsVisible: resultsVisible,
                     onVote: { await vote(for: project) },
                     onDismiss: { selectedProject = nil }
                 )
@@ -79,9 +96,21 @@ struct VotingView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(votingOpen ? Color.ficaSuccess : Color.ficaDanger)
                 Spacer()
-                Text("\(projects.reduce(0) { $0 + ($1.vote_count ?? 0) }) total votes")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.ficaSecondary)
+                // Show total votes only when results are public; otherwise
+                // explain that the tally will be revealed after voting.
+                if resultsVisible {
+                    Text("\(projects.reduce(0) { $0 + ($1.vote_count ?? 0) }) total votes")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.ficaSecondary)
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "eye.slash")
+                            .font(.system(size: 10))
+                        Text("Results hidden")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.ficaMuted)
+                }
             }
 
             if hasVoted, let votedId = myVoteProjectId,
@@ -184,17 +213,19 @@ struct VotingView: View {
                         .frame(maxWidth: .infinity)
                 }
 
-                // Vote count pill overlay
-                HStack(spacing: 4) {
-                    Image(systemName: "chart.bar.fill").font(.system(size: 9))
-                    Text("\(project.vote_count ?? 0)")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                // Vote count pill overlay — only when results are public.
+                if resultsVisible {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chart.bar.fill").font(.system(size: 9))
+                        Text("\(project.vote_count ?? 0)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .padding(8)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .padding(8)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -349,12 +380,46 @@ struct VotingView: View {
             hasVoted = resp.has_voted
             myVoteProjectId = resp.my_vote_project_id
             votingOpen = resp.voting_open
+            resultsVisible = resp.voting_results_visible ?? false
+            // If admin just closed results while the user was on the Results
+            // tab, bounce them back to Projects so they don't see an empty /
+            // blocked tab.
+            if !resultsVisible && showResults { showResults = false }
         } catch {
             if projects.isEmpty {
                 errorMessage = error.localizedDescription
             }
         }
         isLoading = false
+    }
+
+    // MARK: - Live updates
+
+    private func subscribeLiveUpdates() {
+        if wsOpenToken == nil {
+            wsOpenToken = ChatWebSocket.shared.addVotingOpenHandler { open in
+                withAnimation(.easeInOut(duration: 0.2)) { votingOpen = open }
+            }
+        }
+        if wsResultsToken == nil {
+            wsResultsToken = ChatWebSocket.shared.addVotingResultsHandler { visible in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    resultsVisible = visible
+                    if !visible && showResults { showResults = false }
+                }
+                // Counts in `projects` are still zero from the last fetch
+                // when hidden → visible; pull fresh data so real tallies
+                // appear without a manual refresh.
+                if visible {
+                    Task { await load() }
+                }
+            }
+        }
+    }
+
+    private func unsubscribeLiveUpdates() {
+        if let t = wsOpenToken { ChatWebSocket.shared.removeVotingOpenHandler(t); wsOpenToken = nil }
+        if let t = wsResultsToken { ChatWebSocket.shared.removeVotingResultsHandler(t); wsResultsToken = nil }
     }
 
     private func vote(for project: Project) async {
@@ -378,6 +443,9 @@ struct ProjectDetailSheet: View {
     let hasVoted: Bool
     let isMyVote: Bool
     let isVoting: Bool
+    /// Whether vote tallies are revealed — drives whether the Votes
+    /// stat item is shown. Hidden by default.
+    var resultsVisible: Bool = false
     let onVote: () async -> Void
     let onDismiss: () -> Void
 
@@ -446,10 +514,13 @@ struct ProjectDetailSheet: View {
                             }
                         }
 
-                        // Stats row
+                        // Stats row — Votes column only shown when admin
+                        // has revealed results to delegates.
                         HStack(spacing: 0) {
-                            statItem(value: "\(project.vote_count ?? 0)", label: "Votes", icon: "chart.bar.fill")
-                            Divider().frame(height: 30)
+                            if resultsVisible {
+                                statItem(value: "\(project.vote_count ?? 0)", label: "Votes", icon: "chart.bar.fill")
+                                Divider().frame(height: 30)
+                            }
                             statItem(value: project.category?.capitalized ?? "—", label: "Category", icon: ProjectCategory.symbol(for: project.category))
                         }
                         .ficaCard(padding: 12)

@@ -276,7 +276,10 @@ data class ProjectsResponse(
     val projects: List<Project>,
     val has_voted: Boolean,
     val my_vote_project_id: Int? = null,
-    val voting_open: Boolean
+    val voting_open: Boolean,
+    /** Admin-controlled — when false, backend zeroes out vote_count on
+     *  every project and the UI hides tallies / leaderboard. */
+    val voting_results_visible: Boolean? = null,
 )
 
 data class VoteRequest(

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material3.AlertDialog
@@ -56,6 +57,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +79,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.fica.events.data.api.ApiClient
+import com.fica.events.data.api.ChatWebSocket
+import kotlinx.coroutines.launch
 import com.fica.events.data.models.Project
 import com.fica.events.data.models.VoteRequest
 import com.fica.events.data.models.toBool
@@ -105,6 +109,10 @@ fun VotingScreen() {
     var hasVoted by remember { mutableStateOf(false) }
     var myVoteProjectId by remember { mutableStateOf<Int?>(null) }
     var votingOpen by remember { mutableStateOf(false) }
+    // Admin-controlled — hides tallies / leaderboard when false. Backend
+    // also zeroes out vote_count in the response when this is false so the
+    // UI can treat it purely as a UI flag.
+    var resultsVisible by remember { mutableStateOf(false) }
     var showResults by remember { mutableStateOf(false) }
     var selectedProject by remember { mutableStateOf<Project?>(null) }
     var isVoting by remember { mutableStateOf(false) }
@@ -121,6 +129,11 @@ fun VotingScreen() {
                 hasVoted = body.has_voted
                 myVoteProjectId = body.my_vote_project_id
                 votingOpen = body.voting_open
+                resultsVisible = body.voting_results_visible ?: false
+                // If admin just hid results while the user was on the
+                // Results tab, flip back to Projects so they're not
+                // staring at a blocked tab.
+                if (!resultsVisible && showResults) showResults = false
             }
         } catch (e: Exception) {
             if (projects.isEmpty()) {
@@ -147,6 +160,24 @@ fun VotingScreen() {
         isLoading = false
     }
 
+    // Live update subscriptions for both voting flags. When an admin flips
+    // voting open/closed OR reveals/hides results, we update state here
+    // without waiting for the next refresh. When results become visible
+    // we also re-fetch so real vote_count values replace the zeros the
+    // backend was sending while hidden.
+    DisposableEffect(Unit) {
+        val openTok = ChatWebSocket.addVotingOpenHandler { open -> votingOpen = open }
+        val resTok = ChatWebSocket.addVotingResultsHandler { visible ->
+            resultsVisible = visible
+            if (!visible && showResults) showResults = false
+            if (visible) scope.launch { load() }
+        }
+        onDispose {
+            ChatWebSocket.removeVotingOpenHandler(openTok)
+            ChatWebSocket.removeVotingResultsHandler(resTok)
+        }
+    }
+
     // Detail bottom sheet
     selectedProject?.let { project ->
         ModalBottomSheet(
@@ -160,6 +191,7 @@ fun VotingScreen() {
                 hasVoted = hasVoted,
                 isMyVote = myVoteProjectId == project.id,
                 isVoting = isVoting,
+                resultsVisible = resultsVisible,
                 onVote = {
                     scope.launch {
                         vote(project.id)
@@ -217,18 +249,22 @@ fun VotingScreen() {
                         hasVoted = hasVoted,
                         myVoteProjectId = myVoteProjectId,
                         errorMessage = errorMessage,
+                        resultsVisible = resultsVisible,
                     )
                 }
 
-                // Tab Toggle
-                item {
-                    TabToggle(
-                        showResults = showResults,
-                        onToggle = { showResults = it },
-                    )
+                // Tab Toggle — only when results are public; otherwise
+                // delegates just see the projects list, no toggle.
+                if (resultsVisible) {
+                    item {
+                        TabToggle(
+                            showResults = showResults,
+                            onToggle = { showResults = it },
+                        )
+                    }
                 }
 
-                if (showResults) {
+                if (resultsVisible && showResults) {
                     // Results section
                     val sorted = projects.sortedByDescending { it.vote_count ?: 0 }
                     val maxVotes = maxOf(sorted.firstOrNull()?.vote_count ?: 0, 1)
@@ -248,6 +284,7 @@ fun VotingScreen() {
                         ProjectCard(
                             project = project,
                             isMyVote = myVoteProjectId == project.id,
+                            resultsVisible = resultsVisible,
                             onClick = { selectedProject = project },
                         )
                     }
@@ -268,6 +305,7 @@ private fun StatusBanner(
     hasVoted: Boolean,
     myVoteProjectId: Int?,
     errorMessage: String?,
+    resultsVisible: Boolean,
 ) {
     val totalVotes = projects.sumOf { it.vote_count ?: 0 }
     val votedProjectName = if (hasVoted && myVoteProjectId != null) {
@@ -304,12 +342,29 @@ private fun StatusBanner(
                     color = if (votingOpen) FICASuccess else FICADanger,
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "$totalVotes total votes",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = FICASecondary,
-                )
+                if (resultsVisible) {
+                    Text(
+                        text = "$totalVotes total votes",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = FICASecondary,
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(
+                            imageVector = Icons.Filled.VisibilityOff,
+                            contentDescription = null,
+                            tint = FICAMuted,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = "Results hidden",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = FICAMuted,
+                        )
+                    }
+                }
             }
 
             if (votedProjectName != null) {
@@ -433,6 +488,7 @@ private fun TabButton(
 private fun ProjectCard(
     project: Project,
     isMyVote: Boolean,
+    resultsVisible: Boolean = false,
     onClick: () -> Unit,
 ) {
     val catColor = ProjectCategory.colorFor(project.category)
@@ -481,26 +537,29 @@ private fun ProjectCard(
                     lineHeight = 12.sp,
                 )
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier
-                    .background(FICAInputBg, RoundedCornerShape(50))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ThumbUp,
-                    contentDescription = null,
-                    tint = FICANavy,
-                    modifier = Modifier.size(11.dp),
-                )
-                Text(
-                    text = "$voteCount",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = FICAText,
-                    lineHeight = 14.sp,
-                )
+            // Vote count pill — only when results have been revealed by admin.
+            if (resultsVisible) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .background(FICAInputBg, RoundedCornerShape(50))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ThumbUp,
+                        contentDescription = null,
+                        tint = FICANavy,
+                        modifier = Modifier.size(11.dp),
+                    )
+                    Text(
+                        text = "$voteCount",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FICAText,
+                        lineHeight = 14.sp,
+                    )
+                }
             }
         }
 
@@ -738,6 +797,7 @@ private fun ProjectDetailSheet(
     hasVoted: Boolean,
     isMyVote: Boolean,
     isVoting: Boolean,
+    resultsVisible: Boolean = false,
     onVote: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -879,36 +939,39 @@ private fun ProjectDetailSheet(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.BarChart,
-                            contentDescription = null,
-                            tint = catColor,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Text(
-                            text = "${project.vote_count ?: 0}",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = FICAText,
-                        )
-                        Text(
-                            text = "Votes",
-                            fontSize = 11.sp,
-                            color = FICAMuted,
+                    // Votes stat — only shown when results are public.
+                    if (resultsVisible) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.BarChart,
+                                contentDescription = null,
+                                tint = catColor,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = "${project.vote_count ?: 0}",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = FICAText,
+                            )
+                            Text(
+                                text = "Votes",
+                                fontSize = 11.sp,
+                                color = FICAMuted,
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier
+                                .height(30.dp)
+                                .width(1.dp),
+                            color = FICAInputBg,
                         )
                     }
-
-                    HorizontalDivider(
-                        modifier = Modifier
-                            .height(30.dp)
-                            .width(1.dp),
-                        color = FICAInputBg,
-                    )
 
                     Column(
                         modifier = Modifier.weight(1f),

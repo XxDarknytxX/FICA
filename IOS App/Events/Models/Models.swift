@@ -412,6 +412,12 @@ struct ProjectsResponse: Decodable {
     let has_voted: Bool
     let my_vote_project_id: Int?
     let voting_open: Bool
+    /// Admin-controlled toggle for whether vote tallies are revealed to
+    /// delegates. When false the backend also scrubs vote_count to 0 on
+    /// every project; this flag lets the UI hide the whole leaderboard /
+    /// counts block instead of just rendering a row of zeros. Optional so
+    /// older servers that don't send it treat results as hidden.
+    let voting_results_visible: Bool?
 }
 
 struct VoteRequest: Encodable {

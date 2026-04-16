@@ -30,6 +30,9 @@ object ChatWebSocket {
     // (sessionId, discussionEnabled) — tokenised so the list and a
     // currently-open detail screen can subscribe independently.
     private val panelDiscussionHandlers = mutableMapOf<java.util.UUID, (Int, Boolean) -> Unit>()
+    // Voting open/closed + results-visibility flips.
+    private val votingOpenHandlers = mutableMapOf<java.util.UUID, (Boolean) -> Unit>()
+    private val votingResultsHandlers = mutableMapOf<java.util.UUID, (Boolean) -> Unit>()
 
     fun connect(userId: Int) {
         if (webSocket != null) return
@@ -66,6 +69,8 @@ object ChatWebSocket {
         conversationHandlers.clear()
         onAnyMessage = null
         panelDiscussionHandlers.clear()
+        votingOpenHandlers.clear()
+        votingResultsHandlers.clear()
     }
 
     fun addConversationHandler(myId: Int, otherId: Int, handler: (Message) -> Unit) {
@@ -91,6 +96,22 @@ object ChatWebSocket {
         panelDiscussionHandlers.remove(id)
     }
 
+    fun addVotingOpenHandler(handler: (Boolean) -> Unit): java.util.UUID {
+        val id = java.util.UUID.randomUUID()
+        votingOpenHandlers[id] = handler
+        return id
+    }
+
+    fun removeVotingOpenHandler(id: java.util.UUID) { votingOpenHandlers.remove(id) }
+
+    fun addVotingResultsHandler(handler: (Boolean) -> Unit): java.util.UUID {
+        val id = java.util.UUID.randomUUID()
+        votingResultsHandlers[id] = handler
+        return id
+    }
+
+    fun removeVotingResultsHandler(id: java.util.UUID) { votingResultsHandlers.remove(id) }
+
     private fun handleMessage(text: String) {
         try {
             val json = JsonParser.parseString(text).asJsonObject
@@ -109,6 +130,16 @@ object ChatWebSocket {
                     // Copy to avoid ConcurrentModification if a handler
                     // unregisters itself during iteration.
                     panelDiscussionHandlers.values.toList().forEach { it(sessionId, enabled) }
+                }
+                "voting_open_changed" -> {
+                    val data = json.get("data")?.asJsonObject ?: return
+                    val open = data.get("voting_open")?.asBoolean ?: return
+                    votingOpenHandlers.values.toList().forEach { it(open) }
+                }
+                "voting_results_visibility_changed" -> {
+                    val data = json.get("data")?.asJsonObject ?: return
+                    val visible = data.get("voting_results_visible")?.asBoolean ?: return
+                    votingResultsHandlers.values.toList().forEach { it(visible) }
                 }
             }
         } catch (_: Exception) {}

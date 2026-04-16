@@ -17,6 +17,10 @@ final class ChatWebSocket {
     // (sessionId, discussionEnabled) — multiple subscribers supported so
     // the Panels list and a currently-open Panel Detail can both react.
     private var panelDiscussionHandlers: [UUID: (Int, Bool) -> Void] = [:]
+    // Voting open/closed flips (admin → all delegates).
+    private var votingOpenHandlers: [UUID: (Bool) -> Void] = [:]
+    // Voting results visibility flips (admin → all delegates).
+    private var votingResultsHandlers: [UUID: (Bool) -> Void] = [:]
 
     // Production WebSocket — wss://eventsfiji.cloud/ws (Nginx proxies to backend on :5000)
     // For local dev, flip to "ws://localhost:5000/ws" (simulator) or your LAN IP (device).
@@ -45,6 +49,8 @@ final class ChatWebSocket {
         messageHandlers.removeAll()
         onAnyMessage = nil
         panelDiscussionHandlers.removeAll()
+        votingOpenHandlers.removeAll()
+        votingResultsHandlers.removeAll()
     }
 
     func addConversationHandler(myId: Int, otherId: Int, handler: @escaping (Message) -> Void) {
@@ -69,6 +75,28 @@ final class ChatWebSocket {
 
     func removePanelDiscussionHandler(_ id: UUID) {
         panelDiscussionHandlers.removeValue(forKey: id)
+    }
+
+    @discardableResult
+    func addVotingOpenHandler(_ handler: @escaping (_ open: Bool) -> Void) -> UUID {
+        let id = UUID()
+        votingOpenHandlers[id] = handler
+        return id
+    }
+
+    func removeVotingOpenHandler(_ id: UUID) {
+        votingOpenHandlers.removeValue(forKey: id)
+    }
+
+    @discardableResult
+    func addVotingResultsHandler(_ handler: @escaping (_ visible: Bool) -> Void) -> UUID {
+        let id = UUID()
+        votingResultsHandlers[id] = handler
+        return id
+    }
+
+    func removeVotingResultsHandler(_ id: UUID) {
+        votingResultsHandlers.removeValue(forKey: id)
     }
 
     private func listen() {
@@ -125,6 +153,26 @@ final class ChatWebSocket {
                 for handler in self.panelDiscussionHandlers.values {
                     handler(sessionId, enabled)
                 }
+            }
+
+        case "voting_open_changed":
+            struct VotingOpenData: Decodable { let voting_open: Bool }
+            struct VotingOpenPayload: Decodable { let event: String; let data: VotingOpenData }
+            guard let payload = try? JSONDecoder().decode(VotingOpenPayload.self, from: data) else { return }
+            let open = payload.data.voting_open
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                for handler in self.votingOpenHandlers.values { handler(open) }
+            }
+
+        case "voting_results_visibility_changed":
+            struct ResultsData: Decodable { let voting_results_visible: Bool }
+            struct ResultsPayload: Decodable { let event: String; let data: ResultsData }
+            guard let payload = try? JSONDecoder().decode(ResultsPayload.self, from: data) else { return }
+            let visible = payload.data.voting_results_visible
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                for handler in self.votingResultsHandlers.values { handler(visible) }
             }
 
         default:
