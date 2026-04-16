@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+// Lock is used in the per-row Closed pill below.
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ import com.fica.events.ui.components.LoadingView
 import com.fica.events.ui.theme.FICABg
 import com.fica.events.ui.theme.FICABorder
 import com.fica.events.ui.theme.FICACard
+import com.fica.events.ui.theme.FICADanger
 import com.fica.events.ui.theme.FICAGold
 import com.fica.events.ui.theme.FICAInputBg
 import com.fica.events.ui.theme.FICAMuted
@@ -134,9 +136,6 @@ fun PanelsScreen(onOpenPanel: (Int) -> Unit) {
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    if (!discussionEnabled) {
-                        item(key = "closed-banner") { ClosedBanner() }
-                    }
                     items(panels, key = { it.id }) { panel ->
                         PanelRow(
                             panel = panel,
@@ -146,31 +145,6 @@ fun PanelsScreen(onOpenPanel: (Int) -> Unit) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ClosedBanner() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(FICAInputBg)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Lock,
-            contentDescription = null,
-            tint = FICAMuted,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = "Panel discussion is currently closed — you can read questions but not post new ones.",
-            fontSize = 12.sp,
-            color = FICASecondary,
-        )
     }
 }
 
@@ -251,6 +225,16 @@ private fun PanelRow(panel: Panel, onClick: () -> Unit) {
                     textColor = FICANavy,
                     bgColor = FICANavy.copy(alpha = 0.08f),
                 )
+                // Show per-panel Closed pill when admin has toggled it off.
+                // Tapping the row still works — only posting is gated.
+                if (!panel.isDiscussionEnabled) {
+                    Badge(
+                        icon = Icons.Filled.Lock,
+                        text = "Closed",
+                        textColor = FICADanger,
+                        bgColor = FICADanger.copy(alpha = 0.1f),
+                    )
+                }
                 if (panel.isPanelMember) {
                     Badge(
                         icon = Icons.Filled.Star,

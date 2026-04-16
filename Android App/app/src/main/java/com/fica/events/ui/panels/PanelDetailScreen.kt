@@ -107,8 +107,11 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
         try {
             val resp = ApiClient.service.getPanels()
             val body = resp.body() ?: return
-            panel = body.panels.firstOrNull { it.id == panelId }
-            discussionEnabled = body.panel_discussion_enabled
+            val found = body.panels.firstOrNull { it.id == panelId }
+            panel = found
+            // Per-panel flag takes priority; fall back to the global flag
+            // from the response if the per-panel field isn't present yet.
+            discussionEnabled = (found?.isDiscussionEnabled ?: true) && body.panel_discussion_enabled
         } catch (_: Exception) {}
     }
 

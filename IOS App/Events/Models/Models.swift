@@ -449,9 +449,15 @@ struct Panel: Codable, Identifiable, Hashable {
     let congress_year: Int?
     let question_count: Int?
     let is_panel_member: Int?
+    /// Per-panel discussion open/close flag set by admins.
+    /// Defaults to true when the field is missing (older servers) so
+    /// existing behavior — all panels open — is preserved.
+    let discussion_enabled: Bool?
 
     /// 1/0 backend flag exposed as a convenient Bool.
     var isPanelMember: Bool { (is_panel_member ?? 0) != 0 }
+    /// Effective open/closed state — open unless an admin explicitly closed it.
+    var isDiscussionEnabled: Bool { discussion_enabled ?? true }
 }
 
 struct PanelsResponse: Decodable {

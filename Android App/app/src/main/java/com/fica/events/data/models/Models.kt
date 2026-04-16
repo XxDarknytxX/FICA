@@ -316,8 +316,14 @@ data class Panel(
     val congress_year: Int? = null,
     val question_count: Int? = null,
     val is_panel_member: Int? = null,
+    /**
+     * Per-panel open/close flag set by admins. Absent from older server
+     * responses → treated as open for compat.
+     */
+    val discussion_enabled: Boolean? = null,
 ) {
     val isPanelMember: Boolean get() = (is_panel_member ?: 0) != 0
+    val isDiscussionEnabled: Boolean get() = discussion_enabled ?: true
 }
 
 data class PanelsResponse(

@@ -28,9 +28,6 @@ struct PanelsView: View {
                 } else {
                     ScrollView(showsIndicators: false) {
                         LazyVStack(spacing: 10) {
-                            if !discussionEnabled {
-                                closedBanner
-                            }
                             ForEach(panels) { panel in
                                 NavigationLink(value: panel) {
                                     PanelRow(panel: panel)
@@ -46,7 +43,14 @@ struct PanelsView: View {
             }
             .background(Color.ficaBg)
             .navigationDestination(for: Panel.self) { panel in
-                PanelDetailView(panel: panel, discussionEnabled: discussionEnabled)
+                // Gate the composer on the per-panel flag from the selected
+                // row. Falls back to `discussionEnabled` (the response-level
+                // flag) when the per-panel flag isn't set yet — maintains
+                // compat with pre-column backends.
+                PanelDetailView(
+                    panel: panel,
+                    discussionEnabled: panel.isDiscussionEnabled && discussionEnabled
+                )
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -57,21 +61,6 @@ struct PanelsView: View {
             .refreshable { await load() }
             .task { await load() }
         }
-    }
-
-    private var closedBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(Color.ficaMuted)
-            Text("Panel discussion is currently closed — you can read questions but not post new ones.")
-                .font(.system(size: 12))
-                .foregroundStyle(Color.ficaSecondary)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.ficaInputBg)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func load() async {
@@ -147,6 +136,20 @@ private struct PanelRow: View {
                         .background(Color.ficaNavy.opacity(0.08))
                         .clipShape(Capsule())
                         .labelStyle(.titleAndIcon)
+
+                    // Closed pill — only when admin has turned this panel's
+                    // discussion off. Reading is still allowed (tap still
+                    // works); only posting is gated.
+                    if !panel.isDiscussionEnabled {
+                        Label("Closed", systemImage: "lock.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.ficaDanger)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.ficaDanger.opacity(0.1))
+                            .clipShape(Capsule())
+                            .labelStyle(.titleAndIcon)
+                    }
 
                     // "You're on this panel" badge for panel members
                     if panel.isPanelMember {
