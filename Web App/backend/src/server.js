@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
+import jwt from "jsonwebtoken";
 import { getPool } from "./config/db.js";
 import { makeAdminController } from "./controllers/adminController.js";
 import { makeEventController, initEventTables } from "./controllers/eventController.js";
@@ -52,7 +53,12 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:3000", crede
 app.use(express.json());
 
 // ── WebSocket server ────────────────────────────────────────────────────────
-const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+// noServer: true lets us intercept the HTTP upgrade and verify the JWT from
+// the upgrade URL *before* accepting the socket. Previously the socket was
+// accepted unconditionally and any client could JSON-send {"event":"join",
+// "userId":<anyone>} to start receiving another delegate's messages, panel
+// questions, and voting updates.
+const wss = new WebSocketServer({ noServer: true });
 
 // Map userId → Set of connected WebSocket clients
 const userSockets = new Map();
@@ -77,23 +83,74 @@ function broadcastAll(event, data) {
   }
 }
 
+// Authenticate the upgrade request before handing it to wss. We extract the
+// JWT from `?token=...`, verify it, and stash the decoded payload on the
+// upgraded socket. Reject with 401 (pre-upgrade HTTP response) for missing
+// or malformed tokens, and reject with close code 4001 post-upgrade for
+// anything else.
+httpServer.on("upgrade", (req, socket, head) => {
+  // Only intercept /ws upgrades; leave any other path alone.
+  const url = new URL(req.url, "http://internal");
+  if (url.pathname !== "/ws") {
+    socket.destroy();
+    return;
+  }
+
+  const token = url.searchParams.get("token");
+  if (!token) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  const userId = Number(decoded?.id);
+  if (!userId) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    // Stash authenticated identity on the socket so the connection handler
+    // trusts it instead of any client-supplied value.
+    ws._authUserId = userId;
+    ws._authRole = decoded.role || "delegate";
+    wss.emit("connection", ws, req);
+  });
+});
+
 wss.on("connection", (ws) => {
-  let userId = null;
+  const userId = ws._authUserId;
+  if (!userId) {
+    ws.close(4001, "unauthenticated");
+    return;
+  }
+  if (!userSockets.has(userId)) userSockets.set(userId, new Set());
+  userSockets.get(userId).add(ws);
+  console.log(`WS: user ${userId} joined (role=${ws._authRole})`);
 
   ws.on("message", (raw) => {
+    // We no longer trust `{event:"join",userId}` to add a subscription —
+    // userId is derived from the verified JWT on the upgrade. Keep the
+    // handler as a no-op so older clients that still send a join message
+    // don't get logged as errors.
     try {
       const msg = JSON.parse(raw);
-      if (msg.event === "join" && msg.userId) {
-        userId = Number(msg.userId);
-        if (!userSockets.has(userId)) userSockets.set(userId, new Set());
-        userSockets.get(userId).add(ws);
-        console.log(`WS: user ${userId} joined`);
-      }
+      if (msg?.event === "join") return;
     } catch (_) {}
   });
 
   ws.on("close", () => {
-    if (userId && userSockets.has(userId)) {
+    if (userSockets.has(userId)) {
       userSockets.get(userId).delete(ws);
       if (userSockets.get(userId).size === 0) userSockets.delete(userId);
       console.log(`WS: user ${userId} disconnected`);

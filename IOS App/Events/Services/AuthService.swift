@@ -30,8 +30,10 @@ class AuthService {
                 currentUser = user
             }
         }
-        if isAuthenticated, let user = currentUser {
-            ChatWebSocket.shared.connect(userId: user.id)
+        // WS now requires the JWT on the upgrade URL. Only reconnect if
+        // both pieces are present.
+        if isAuthenticated, let user = currentUser, let tkn = token {
+            ChatWebSocket.shared.connect(userId: user.id, token: tkn)
         }
         isLoading = false
     }
@@ -44,7 +46,7 @@ class AuthService {
         }
         currentUser = response.attendee
         isAuthenticated = true
-        ChatWebSocket.shared.connect(userId: response.attendee.id)
+        ChatWebSocket.shared.connect(userId: response.attendee.id, token: response.token)
     }
 
     func refreshProfile() async {

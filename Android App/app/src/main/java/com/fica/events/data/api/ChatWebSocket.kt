@@ -17,6 +17,9 @@ object ChatWebSocket {
 
     private var webSocket: WebSocket? = null
     private var userId: Int? = null
+    // Cached JWT so an onFailure-triggered reconnect can re-auth with the
+    // server's upgrade-URL check. Cleared on disconnect().
+    private var authToken: String? = null
     private val gson = Gson()
     private val client = OkHttpClient()
 
@@ -34,14 +37,24 @@ object ChatWebSocket {
     private val votingOpenHandlers = mutableMapOf<java.util.UUID, (Boolean) -> Unit>()
     private val votingResultsHandlers = mutableMapOf<java.util.UUID, (Boolean) -> Unit>()
 
-    fun connect(userId: Int) {
+    /**
+     * Open an authenticated WebSocket. The JWT is appended to the upgrade
+     * URL as `?token=<jwt>`; the server verifies it on upgrade and rejects
+     * missing/invalid tokens with HTTP 401. The userId argument is kept
+     * for caller ergonomics but identity is now derived from the verified
+     * token on the server.
+     */
+    fun connect(userId: Int, token: String) {
         if (webSocket != null) return
         this.userId = userId
+        this.authToken = token
 
-        val request = Request.Builder().url(WS_URL).build()
+        val encodedToken = java.net.URLEncoder.encode(token, "UTF-8")
+        val request = Request.Builder().url("$WS_URL?token=$encodedToken").build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
-                // Join with our user ID
+                // Server no longer trusts this message; sent only so older
+                // backends during a rolling upgrade still see a join.
                 ws.send("""{"event":"join","userId":$userId}""")
             }
 
@@ -51,10 +64,14 @@ object ChatWebSocket {
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 webSocket = null
-                // Reconnect after 3 seconds
+                // Reconnect after 3 seconds using the cached token. If the
+                // token has expired the server will reject the upgrade
+                // and the next attempt will fail — the user must log in
+                // again to refresh it.
                 Thread.sleep(3000)
                 val uid = ChatWebSocket.userId
-                if (uid != null) connect(uid)
+                val tkn = ChatWebSocket.authToken
+                if (uid != null && tkn != null) connect(uid, tkn)
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
@@ -66,6 +83,7 @@ object ChatWebSocket {
     fun disconnect() {
         webSocket?.close(1000, "logout")
         webSocket = null
+        authToken = null
         conversationHandlers.clear()
         onAnyMessage = null
         panelDiscussionHandlers.clear()

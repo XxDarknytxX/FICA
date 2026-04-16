@@ -22,9 +22,12 @@ object AuthManager {
         // Restore token to ApiClient if it exists
         token?.let { ApiClient.updateToken(it) }
 
-        // Connect WebSocket if already authenticated
-        if (isAuthenticated) {
-            currentUser?.let { ChatWebSocket.connect(it.id) }
+        // WS now requires the JWT on the upgrade URL. Only reconnect if
+        // we have both user + token.
+        val tkn = token
+        val user = currentUser
+        if (isAuthenticated && tkn != null && user != null) {
+            ChatWebSocket.connect(user.id, tkn)
         }
     }
 
@@ -71,7 +74,7 @@ object AuthManager {
         this.token = token
         this.currentUser = user
         ApiClient.updateToken(token)
-        ChatWebSocket.connect(user.id)
+        ChatWebSocket.connect(user.id, token)
     }
 
     fun logout() {

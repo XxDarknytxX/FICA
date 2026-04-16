@@ -8,6 +8,9 @@ final class ChatWebSocket {
     private var task: URLSessionWebSocketTask?
     private var isConnected = false
     private var userId: Int?
+    // Cached JWT so a failure-triggered reconnect has what it needs to
+    // re-auth on the upgrade URL. Cleared on disconnect().
+    private var token: String?
 
     // Callbacks keyed by conversation pair "min-max"
     private var messageHandlers: [String: (Message) -> Void] = [:]
@@ -26,16 +29,28 @@ final class ChatWebSocket {
     // For local dev, flip to "ws://localhost:5000/ws" (simulator) or your LAN IP (device).
     private let wsURL = "wss://eventsfiji.cloud/ws"
 
-    func connect(userId: Int) {
+    /// Open an authenticated WebSocket. The JWT is appended as a query
+    /// param; the server verifies it on upgrade and rejects invalid /
+    /// missing tokens with HTTP 401. The userId argument is kept for
+    /// backward-compat / caller ergonomics but is no longer trusted by
+    /// the server — identity is derived from the verified token.
+    func connect(userId: Int, token: String) {
         guard !isConnected else { return }
         self.userId = userId
+        self.token = token
 
-        guard let url = URL(string: wsURL) else { return }
+        // URL-encode the token just in case a future token format includes
+        // `+`, `/`, or `=` (base64url JWTs don't, but defensive).
+        let allowed = CharacterSet.urlQueryAllowed
+        let encoded = token.addingPercentEncoding(withAllowedCharacters: allowed) ?? token
+        guard let url = URL(string: "\(wsURL)?token=\(encoded)") else { return }
         task = URLSession.shared.webSocketTask(with: url)
         task?.resume()
         isConnected = true
 
-        // Join with our user ID
+        // The server no longer reads userId from the join message, but we
+        // keep sending it so a rolling upgrade where some backends still
+        // expect the message won't regress. Server-side it's a no-op.
         let joinMsg = #"{"event":"join","userId":\#(userId)}"#
         task?.send(.string(joinMsg)) { _ in }
 
@@ -46,6 +61,7 @@ final class ChatWebSocket {
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         isConnected = false
+        token = nil
         messageHandlers.removeAll()
         onAnyMessage = nil
         panelDiscussionHandlers.removeAll()
@@ -111,10 +127,13 @@ final class ChatWebSocket {
             case .failure:
                 Task { @MainActor in
                     self?.isConnected = false
-                    // Reconnect after 3 seconds
+                    // Reconnect after 3 seconds using the cached token. If
+                    // the token has expired the server will 401 on upgrade
+                    // and the next receive() will fail — loop will back off
+                    // until the user next logs in.
                     try? await Task.sleep(for: .seconds(3))
-                    if let uid = self?.userId {
-                        self?.connect(userId: uid)
+                    if let uid = self?.userId, let tkn = self?.token {
+                        self?.connect(userId: uid, token: tkn)
                     }
                 }
             }
