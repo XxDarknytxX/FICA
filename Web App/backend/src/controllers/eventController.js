@@ -20,6 +20,17 @@ const send = {
   unauthorized: (res, msg = "Unauthorized") => res.status(401).json({ error: msg }),
 };
 
+// Pre-computed bcrypt hash of a random per-boot string. The only place this
+// is ever used is delegateLogin's "no such attendee" path — we run a
+// bcrypt.compare against it so a login attempt for an unknown email takes
+// the same wall-clock time as one for a known email with a wrong password.
+// Without this, an attacker could enumerate valid delegate emails by
+// response timing.
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync(
+  `dummy-${Math.random().toString(36).slice(2)}-${Date.now()}`,
+  10,
+);
+
 export async function initEventTables(pool) {
   // Admin users table — owned by the FICA app in this dedicated database.
   await pool.query(`
@@ -897,7 +908,16 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
-  // Delegate login — used by mobile app
+  // Delegate login — used by mobile app.
+  //
+  // Every failure returns the same "Invalid credentials" message (no more
+  // "account not activated" vs "invalid credentials" hint) and always runs
+  // a bcrypt.compare against *something* so the response time for a
+  // nonexistent email matches the response time for a wrong password —
+  // both used to leak information.
+  //
+  // This dummy hash is a bcrypt hash of a random string generated once at
+  // module load. We only ever use it to burn CPU on the no-user path.
   const delegateLogin = async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return send.bad(res, "Email and password required");
@@ -906,10 +926,14 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
         "SELECT * FROM attendees WHERE email=? AND account_active=TRUE", [email]
       );
       const attendee = rows[0];
-      if (!attendee || !attendee.password_hash) return send.unauthorized(res, "Invalid credentials or account not activated");
       const bcrypt = await import("bcryptjs");
-      const ok = await bcrypt.default.compare(password, attendee.password_hash);
-      if (!ok) return send.unauthorized(res, "Invalid credentials");
+      // If the attendee doesn't exist or doesn't have a hash yet, still run a
+      // bcrypt.compare so the timing attacker can't distinguish the branches.
+      const hashToCompare = attendee?.password_hash || DUMMY_BCRYPT_HASH;
+      const ok = await bcrypt.default.compare(password, hashToCompare);
+      if (!attendee || !attendee.password_hash || !ok) {
+        return send.unauthorized(res, "Invalid credentials");
+      }
       const jwt = await import("jsonwebtoken");
       const token = jwt.default.sign(
         { id: attendee.id, email: attendee.email, role: "delegate" },

@@ -2,6 +2,8 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import jwt from "jsonwebtoken";
@@ -49,8 +51,38 @@ import { makeEventRouter, makeDelegateRouter } from "./routes/event.js";
 const app = express();
 const httpServer = createServer(app);
 
+// Helmet sets a bundle of security response headers (X-Frame-Options: DENY,
+// Strict-Transport-Security, Referrer-Policy, X-Content-Type-Options, etc).
+// CSP is disabled because the admin React app loads assets from Vite and
+// we don't have a vetted CSP for it yet — a misconfigured CSP would blank
+// the admin panel. The rest of the headers are safe defaults.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:3000", credentials: true }));
 app.use(express.json());
+
+// Trust the first proxy hop so express-rate-limit sees the real client IP
+// when we're behind Nginx on the VPS. Without this, all traffic looks like
+// it's from 127.0.0.1 and the limiter is effectively global.
+app.set("trust proxy", 1);
+
+// ── Rate limiters ──────────────────────────────────────────────────────────
+// Tight caps on auth + email-sending endpoints to slow credential stuffing
+// and mailbomb abuse. Standard headers (RateLimit-*) are returned so the
+// admin UI can surface a nice message later if we want.
+const loginLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 min
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts, try again later" },
+});
+const emailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, try again later" },
+});
 
 // ── WebSocket server ────────────────────────────────────────────────────────
 // noServer: true lets us intercept the HTTP upgrade and verify the JWT from
@@ -164,6 +196,19 @@ await initEventTables(pool);
 
 const admin = makeAdminController(pool);
 const event = makeEventController(pool, broadcastToUser, broadcastAll);
+
+// ── Rate-limited auth endpoints ────────────────────────────────────────────
+// These have to be applied *before* the routers mount on /api and
+// /api/delegate so they take effect. The limiters only match the exact
+// path; everything else on /api still flows through normally.
+app.use("/api/login", loginLimiter);
+app.use("/api/register", loginLimiter);
+app.use("/api/reset-password", loginLimiter);
+app.use("/api/delegate/login", loginLimiter);
+// Email-sending paths (onboarding + admin-triggered password reset)
+// cap tighter to reduce abuse risk — these actually hit SMTP.
+app.use("/api/event/users/:id/send-onboarding", emailLimiter);
+app.use("/api/event/users/:id/send-reset", emailLimiter);
 
 // Admin panel routes
 app.use("/api", makeAuthRouter(admin, event));
