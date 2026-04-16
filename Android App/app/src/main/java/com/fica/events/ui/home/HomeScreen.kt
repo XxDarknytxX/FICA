@@ -65,6 +65,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.fica.events.ui.components.SponsorImage
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.CachePolicy
@@ -979,15 +982,23 @@ private fun SponsorCard(sponsor: Sponsor, modifier: Modifier = Modifier) {
                 .background(FICAInputBg, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (!sponsor.logo_url.isNullOrBlank()) {
-                AsyncImage(
+            val bundledRes = SponsorImage.bundledResFor(sponsor.logo_url)
+            when {
+                // Packaged asset — instant render, no network.
+                bundledRes != null -> Image(
+                    painter = painterResource(id = bundledRes),
+                    contentDescription = sponsor.name,
+                    modifier = Modifier.fillMaxSize().padding(5.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                // Remote URL fallback for any non-bundled sponsor.
+                !sponsor.logo_url.isNullOrBlank() -> AsyncImage(
                     model = sponsor.logo_url,
                     contentDescription = sponsor.name,
                     modifier = Modifier.fillMaxSize().padding(5.dp),
                     contentScale = ContentScale.Fit,
                 )
-            } else {
-                Text(
+                else -> Text(
                     text = sponsor.name.take(2).uppercase(),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,

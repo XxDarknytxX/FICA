@@ -63,18 +63,27 @@ struct SponsorsView: View {
 
     private func sponsorCard(_ sp: Sponsor, tier: String) -> some View {
         HStack(spacing: 14) {
-            // Logo slot — CachedImage reads from ImageCache (preloaded by
-            // load()) so the logo paints on the same frame as the row.
+            // Logo slot — bundled asset first (instant, offline-safe),
+            // CachedImage URL fallback otherwise.
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.ficaInputBg)
                 .frame(width: 56, height: 42)
                 .overlay(
-                    CachedImage(url: sp.logo_url.flatMap(URL.init), contentMode: .fit) {
-                        Text(String(sp.name.prefix(2)).uppercased())
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.ficaNavy)
+                    Group {
+                        if let asset = SponsorImage.bundledAsset(for: sp.logo_url) {
+                            Image(asset)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(6)
+                        } else {
+                            CachedImage(url: sp.logo_url.flatMap(URL.init), contentMode: .fit) {
+                                Text(String(sp.name.prefix(2)).uppercased())
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                                    .foregroundStyle(Color.ficaNavy)
+                            }
+                            .padding(6)
+                        }
                     }
-                    .padding(6)
                 )
             VStack(alignment: .leading, spacing: 3) {
                 Text(sp.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.ficaText)

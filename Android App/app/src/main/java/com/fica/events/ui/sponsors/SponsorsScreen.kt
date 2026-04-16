@@ -52,6 +52,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.fica.events.ui.components.SponsorImage
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.CachePolicy
@@ -252,15 +255,21 @@ private fun SponsorRow(sponsor: Sponsor, onClick: () -> Unit) {
                 .background(FICAInputBg),
             contentAlignment = Alignment.Center,
         ) {
-            if (!sponsor.logo_url.isNullOrBlank()) {
-                AsyncImage(
+            val bundledRes = SponsorImage.bundledResFor(sponsor.logo_url)
+            when {
+                bundledRes != null -> Image(
+                    painter = painterResource(id = bundledRes),
+                    contentDescription = sponsor.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
+                !sponsor.logo_url.isNullOrBlank() -> AsyncImage(
                     model = sponsor.logo_url,
                     contentDescription = sponsor.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
-            } else {
-                Text(
+                else -> Text(
                     text = sponsor.name.take(2).uppercase(),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
@@ -299,15 +308,21 @@ private fun SponsorDetailContent(sponsor: Sponsor) {
                 .background(FICAInputBg),
             contentAlignment = Alignment.Center,
         ) {
-            if (!sponsor.logo_url.isNullOrBlank()) {
-                AsyncImage(
+            val bundledRes = SponsorImage.bundledResFor(sponsor.logo_url)
+            when {
+                bundledRes != null -> Image(
+                    painter = painterResource(id = bundledRes),
+                    contentDescription = sponsor.name,
+                    modifier = Modifier.fillMaxSize().padding(12.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                !sponsor.logo_url.isNullOrBlank() -> AsyncImage(
                     model = sponsor.logo_url,
                     contentDescription = sponsor.name,
                     modifier = Modifier.fillMaxSize().padding(12.dp),
                     contentScale = ContentScale.Fit,
                 )
-            } else {
-                Icon(
+                else -> Icon(
                     Icons.Default.BusinessCenter,
                     contentDescription = null,
                     tint = FICANavy,
