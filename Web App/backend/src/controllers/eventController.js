@@ -254,6 +254,36 @@ export async function initEventTables(pool) {
       FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE
     )
   `);
+
+  // ─── Panel Discussion ──────────────────────────────────────────────────────
+  // panel_members: admin-assigned attendees who sit on a given panel session.
+  // Used to show the "You're on this panel" badge and to tag that attendee's
+  // questions distinctly in the public Q&A list.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS panel_members (
+      session_id INT NOT NULL,
+      attendee_id INT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (session_id, attendee_id),
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE
+    )
+  `);
+
+  // panel_questions: attendee-submitted questions for a specific panel session.
+  // Public — every delegate sees every question on the panel they're viewing.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS panel_questions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      session_id INT NOT NULL,
+      attendee_id INT NOT NULL,
+      question TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
+      INDEX idx_panel_questions_session (session_id, created_at)
+    )
+  `);
 }
 
 export function makeEventController(pool, broadcastToUser = null) {
@@ -1665,6 +1695,154 @@ export function makeEventController(pool, broadcastToUser = null) {
     }
   };
 
+  // ─── PANEL DISCUSSION (Delegate) ─────────────────────────────────────────
+  // Lists every session with type='panel' for the given congress year, with
+  // the attendee's own "am I on this panel?" flag + the current question
+  // count, plus the global panel_discussion_enabled toggle so the mobile UI
+  // can disable its composer without a second fetch.
+  const getPanels = async (req, res) => {
+    const attendeeId = req.user.id;
+    const year = req.query.year ? parseInt(req.query.year) : null;
+    try {
+      const params = [attendeeId];
+      let sql = `
+        SELECT
+          s.*,
+          DATE_FORMAT(s.session_date, '%Y-%m-%d') AS session_date,
+          sp.name AS speaker_name,
+          sp.title AS speaker_title,
+          sp.organization AS speaker_org,
+          sp.photo_url AS speaker_photo,
+          (SELECT COUNT(*) FROM panel_questions pq WHERE pq.session_id = s.id) AS question_count,
+          (SELECT 1 FROM panel_members pm WHERE pm.session_id = s.id AND pm.attendee_id = ? LIMIT 1) AS is_panel_member
+        FROM sessions s
+        LEFT JOIN speakers sp ON s.speaker_id = sp.id
+        WHERE s.type = 'panel'
+      `;
+      if (year) { sql += " AND s.congress_year = ?"; params.push(year); }
+      sql += " ORDER BY s.session_date ASC, s.start_time ASC";
+      const [rows] = await pool.query(sql, params);
+      // Coerce the correlated subquery result (null vs 1) into a plain 0/1.
+      const panels = rows.map(r => ({ ...r, is_panel_member: r.is_panel_member ? 1 : 0 }));
+      const [settingRow] = await pool.query("SELECT setting_value FROM event_settings WHERE setting_key='panel_discussion_enabled'");
+      const panel_discussion_enabled = settingRow.length === 0 || settingRow[0].setting_value === "true";
+      return send.ok(res, { panels, panel_discussion_enabled });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // List all questions on a panel, newest first. Each row is joined with the
+  // asker's attendee record so the mobile card can show name + org + "Panel
+  // Member" chip without a second lookup.
+  const getPanelQuestions = async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [[panel]] = await pool.query("SELECT id FROM sessions WHERE id=? AND type='panel'", [id]);
+      if (!panel) return send.notFound(res, "Panel not found");
+      const [rows] = await pool.query(`
+        SELECT
+          pq.id,
+          pq.session_id,
+          pq.attendee_id,
+          pq.question,
+          pq.created_at,
+          a.name AS attendee_name,
+          a.organization AS attendee_org,
+          a.photo_url AS attendee_photo,
+          (SELECT 1 FROM panel_members pm WHERE pm.session_id = pq.session_id AND pm.attendee_id = pq.attendee_id LIMIT 1) AS is_panel_member
+        FROM panel_questions pq
+        JOIN attendees a ON a.id = pq.attendee_id
+        WHERE pq.session_id = ?
+        ORDER BY pq.created_at DESC
+      `, [id]);
+      const questions = rows.map(r => ({ ...r, is_panel_member: r.is_panel_member ? 1 : 0 }));
+      return send.ok(res, { questions });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // Post a new question. Gated by the panel_discussion_enabled setting so
+  // admins can close questions with a single toggle.
+  const postPanelQuestion = async (req, res) => {
+    const attendeeId = req.user.id;
+    const { id } = req.params;
+    const question = (req.body?.question || "").trim();
+    if (!question) return send.bad(res, "Question is required");
+    if (question.length > 1000) return send.bad(res, "Question is too long (max 1000 characters)");
+    try {
+      const [settingRow] = await pool.query("SELECT setting_value FROM event_settings WHERE setting_key='panel_discussion_enabled'");
+      const enabled = settingRow.length === 0 || settingRow[0].setting_value === "true";
+      if (!enabled) return send.bad(res, "Panel discussion is currently closed");
+      const [[panel]] = await pool.query("SELECT id FROM sessions WHERE id=? AND type='panel'", [id]);
+      if (!panel) return send.notFound(res, "Panel not found");
+      const [result] = await pool.query(
+        "INSERT INTO panel_questions (session_id, attendee_id, question) VALUES (?, ?, ?)",
+        [id, attendeeId, question]
+      );
+      // Echo back the inserted row enriched the same way getPanelQuestions
+      // returns it, so the client can append without re-fetching the list.
+      const [[inserted]] = await pool.query(`
+        SELECT
+          pq.id, pq.session_id, pq.attendee_id, pq.question, pq.created_at,
+          a.name AS attendee_name, a.organization AS attendee_org, a.photo_url AS attendee_photo,
+          (SELECT 1 FROM panel_members pm WHERE pm.session_id = pq.session_id AND pm.attendee_id = pq.attendee_id LIMIT 1) AS is_panel_member
+        FROM panel_questions pq
+        JOIN attendees a ON a.id = pq.attendee_id
+        WHERE pq.id = ?
+      `, [result.insertId]);
+      inserted.is_panel_member = inserted.is_panel_member ? 1 : 0;
+      return send.created(res, { question: inserted });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // ─── PANEL DISCUSSION (Admin) ────────────────────────────────────────────
+  // Panel member assignment — simple set-replacement API. Admin sends the
+  // desired full list of attendee IDs for a panel; we wipe + reinsert inside
+  // a transaction so the picker modal can "save" as a single action.
+  const getPanelMembers = async (req, res) => {
+    const { sessionId } = req.params;
+    try {
+      const [rows] = await pool.query("SELECT attendee_id FROM panel_members WHERE session_id=?", [sessionId]);
+      return send.ok(res, { member_ids: rows.map(r => r.attendee_id) });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  const setPanelMembers = async (req, res) => {
+    const { sessionId } = req.params;
+    const attendeeIds = Array.isArray(req.body?.attendee_ids) ? req.body.attendee_ids : null;
+    if (!attendeeIds) return send.bad(res, "attendee_ids array is required");
+    const conn = await pool.getConnection();
+    try {
+      const [[panel]] = await conn.query("SELECT id FROM sessions WHERE id=? AND type='panel'", [sessionId]);
+      if (!panel) { conn.release(); return send.notFound(res, "Panel not found"); }
+      await conn.beginTransaction();
+      await conn.query("DELETE FROM panel_members WHERE session_id=?", [sessionId]);
+      if (attendeeIds.length > 0) {
+        const values = attendeeIds.map(() => "(?, ?)").join(", ");
+        const params = attendeeIds.flatMap(id => [sessionId, id]);
+        await conn.query(`INSERT INTO panel_members (session_id, attendee_id) VALUES ${values}`, params);
+      }
+      await conn.commit();
+      return send.ok(res, { member_ids: attendeeIds });
+    } catch (e) {
+      await conn.rollback();
+      console.error(e);
+      return send.serverErr(res);
+    } finally {
+      conn.release();
+    }
+  };
+
   return {
     getStats: getStatsNew,
     getSpeakers, createSpeaker, updateSpeaker, deleteSpeaker,
@@ -1694,5 +1872,8 @@ export function makeEventController(pool, broadcastToUser = null) {
     getProjects, createProject, updateProject, deleteProject,
     getVoteResults, getVoteDetails, toggleVoting,
     getDelegateProjects, castVote, removeVote,
+    // Panel Discussion
+    getPanels, getPanelQuestions, postPanelQuestion,
+    getPanelMembers, setPanelMembers,
   };
 }

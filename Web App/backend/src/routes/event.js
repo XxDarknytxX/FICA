@@ -100,6 +100,10 @@ export function makeEventRouter(controller) {
   r.get("/votes/details/:projectId", controller.getVoteDetails);
   r.post("/votes/toggle", controller.toggleVoting);
 
+  // Panel member management
+  r.get("/panel-members/:sessionId", controller.getPanelMembers);
+  r.put("/panel-members/:sessionId", controller.setPanelMembers);
+
   return r;
 }
 
@@ -142,6 +146,11 @@ export function makeDelegateRouter(controller) {
   r.get("/projects", requireAuth, controller.getDelegateProjects);
   r.post("/vote", requireAuth, controller.castVote);
   r.delete("/vote", requireAuth, controller.removeVote);
+
+  // Panel Discussion
+  r.get("/panels", requireAuth, controller.getPanels);
+  r.get("/panels/:id/questions", requireAuth, controller.getPanelQuestions);
+  r.post("/panels/:id/questions", requireAuth, controller.postPanelQuestion);
 
   return r;
 }

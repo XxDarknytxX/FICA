@@ -298,6 +298,7 @@ async function seed() {
     ["timezone", "Pacific/Fiji"],
     ["voting_open", "true"],
     ["current_congress_year", "2026"],
+    ["panel_discussion_enabled", "true"],
   ];
   await pool.query("DELETE FROM event_settings");
   for (const [key, value] of settingsData) {
