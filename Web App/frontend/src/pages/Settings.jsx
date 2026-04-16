@@ -37,6 +37,8 @@ const SETTING_FIELDS = [
     fields: [
       { key: "registration_open", label: "Registration Open", placeholder: "true or false", type: "text" },
       { key: "mobile_app_enabled", label: "Mobile App Enabled", placeholder: "true or false", type: "text" },
+      { key: "voting_open", label: "Voting Open", placeholder: "true or false", type: "text" },
+      { key: "panel_discussion_enabled", label: "Panel Discussions Open", placeholder: "true or false", type: "text", hint: "When \"false\", delegates can view panel questions but cannot post new ones." },
     ]
   },
 ];
@@ -154,6 +156,9 @@ export default function Settings() {
                         onChange={set(f.key)}
                         placeholder={f.placeholder}
                       />
+                      {f.hint && (
+                        <div style={{ fontSize: 11, color: "#718096", marginTop: 4 }}>{f.hint}</div>
+                      )}
                     </div>
                   ))}
                 </div>

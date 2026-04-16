@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   Plus, Pencil, Trash2, Calendar, Clock, MapPin, Users,
-  User as UserIcon, Mic2,
+  User as UserIcon, Mic2, UsersRound,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import PageHeader from "../components/PageHeader";
+import PanelMembersModal from "../components/PanelMembersModal";
 import { api } from "../services/api";
 import {
   Toast, useToast, StatCard, IconBtn, Chip, SegmentedTabs,
@@ -44,6 +45,8 @@ export default function Agenda() {
   const [activeDay, setActiveDay] = useState("2026-05-08");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  // Session whose panel members are being edited. null = modal closed.
+  const [panelMembersFor, setPanelMembersFor] = useState(null);
   const { message, show } = useToast();
 
   async function load() {
@@ -191,6 +194,7 @@ export default function Agenda() {
                 isLast={idx === daySessions.length - 1}
                 onEdit={() => openEdit(s)}
                 onDelete={() => setDeleteConfirm(s)}
+                onManagePanel={() => setPanelMembersFor(s)}
               />
             ))}
           </div>
@@ -332,12 +336,20 @@ export default function Agenda() {
         onCancel={() => !deleting && setDeleteConfirm(null)}
         onConfirm={confirmDelete}
       />
+
+      {panelMembersFor && (
+        <PanelMembersModal
+          session={panelMembersFor}
+          onClose={() => setPanelMembersFor(null)}
+          onSaved={(count) => show("success", `Saved ${count} panel member${count === 1 ? "" : "s"}`)}
+        />
+      )}
     </Layout>
   );
 }
 
 /* ───────── Session row ───────── */
-function SessionRow({ session, isFirst, isLast, onEdit, onDelete }) {
+function SessionRow({ session, isFirst, isLast, onEdit, onDelete, onManagePanel }) {
   const style = TYPE_STYLES[session.type] || TYPE_STYLES.break;
   return (
     <div
@@ -417,6 +429,15 @@ function SessionRow({ session, isFirst, isLast, onEdit, onDelete }) {
             )}
           </div>
           <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+            {session.type === "panel" && onManagePanel && (
+              <IconBtn
+                Icon={UsersRound}
+                color="#0F2D5E"
+                bg="#eef2ff"
+                title="Manage panel members"
+                onClick={onManagePanel}
+              />
+            )}
             <IconBtn Icon={Pencil} color="#7c3aed" bg="#f5f3ff" title="Edit" onClick={onEdit} />
             <IconBtn Icon={Trash2} color="#dc2626" bg="#fff5f5" title="Delete" onClick={onDelete} />
           </div>
