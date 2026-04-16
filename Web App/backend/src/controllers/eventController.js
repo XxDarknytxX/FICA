@@ -1436,9 +1436,13 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
       `);
       const [[{ totalVotes }]] = await pool.query("SELECT COUNT(*) as totalVotes FROM votes");
       const [[{ totalDelegates }]] = await pool.query("SELECT COUNT(*) as totalDelegates FROM attendees WHERE account_active=TRUE AND password_hash IS NOT NULL");
-      const [settingRow] = await pool.query("SELECT setting_value FROM event_settings WHERE setting_key='voting_open'");
-      const votingOpen = settingRow.length > 0 && settingRow[0].setting_value === "true";
-      return send.ok(res, { projects, totalVotes, totalDelegates, votingOpen });
+      const [flagRows] = await pool.query(
+        "SELECT setting_key, setting_value FROM event_settings WHERE setting_key IN ('voting_open','voting_results_visible')"
+      );
+      const flags = Object.fromEntries(flagRows.map(r => [r.setting_key, r.setting_value]));
+      const votingOpen = flags.voting_open === "true";
+      const votingResultsVisible = flags.voting_results_visible === "true";
+      return send.ok(res, { projects, totalVotes, totalDelegates, votingOpen, votingResultsVisible });
     } catch (e) {
       console.error(e);
       return send.serverErr(res);

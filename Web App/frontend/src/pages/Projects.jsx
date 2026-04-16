@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Plus, Pencil, Trash2, Trophy, Users, BarChart3, Eye, Power,
+  Plus, Pencil, Trash2, Trophy, Users, BarChart3, Eye, EyeOff, Power,
   ImageIcon,
 } from "lucide-react";
 import Layout from "../components/Layout";
@@ -31,6 +31,7 @@ export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [results, setResults] = useState(null);
   const [votingOpen, setVotingOpen] = useState(false);
+  const [resultsVisible, setResultsVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -50,6 +51,7 @@ export default function Projects() {
         const data = await api("/event/votes/results");
         setResults(data);
         setVotingOpen(!!data.votingOpen);
+        setResultsVisible(!!data.votingResultsVisible);
       }
     } catch (e) {
       show("error", e.message);
@@ -107,6 +109,19 @@ export default function Projects() {
       show("success", !votingOpen ? "Voting opened" : "Voting closed");
     } catch (e) {
       show("error", e.message);
+    }
+  }
+
+  async function toggleResultsVisible() {
+    const next = !resultsVisible;
+    // Optimistic flip — restore on error via load().
+    setResultsVisible(next);
+    try {
+      await api("/event/votes/toggle-results", { method: "POST", body: { visible: next } });
+      show("success", next ? "Results are now visible to delegates" : "Results are now hidden from delegates");
+    } catch (e) {
+      show("error", e.message);
+      load();
     }
   }
 
@@ -212,6 +227,43 @@ export default function Projects() {
                   <Power size={18} />
                 </button>
               </div>
+
+              {/* Results visibility — admin-controlled; when off, delegate
+                  mobile app sees the project list + their own vote, but
+                  no tallies or leaderboard. */}
+              <div className="card" style={{
+                padding: "14px 16px",
+                background: resultsVisible
+                  ? "linear-gradient(135deg, #eef2ff, #ede9fe)"
+                  : "linear-gradient(135deg, #f8fafc, #f1f5f9)",
+                border: `1px solid ${resultsVisible ? "#c7d2fe" : "#cbd5e1"}`,
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+              }}>
+                <div>
+                  <div style={{
+                    fontSize: 11, fontWeight: 700,
+                    color: resultsVisible ? "#6b21a8" : "#475569",
+                    textTransform: "uppercase", letterSpacing: "0.05em",
+                  }}>
+                    Results {resultsVisible ? "VISIBLE" : "HIDDEN"}
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: resultsVisible ? "#6b21a8" : "#475569", marginTop: 4 }}>
+                    {resultsVisible ? "Delegates can see tallies" : "Hidden from delegates"}
+                  </div>
+                </div>
+                <button
+                  onClick={toggleResultsVisible}
+                  style={{
+                    width: 42, height: 42, borderRadius: 12, border: "none", cursor: "pointer",
+                    background: resultsVisible ? "#475569" : "#6b21a8", color: "white",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                  title={resultsVisible ? "Hide results from delegates" : "Reveal results to delegates"}
+                >
+                  {resultsVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+
               <StatCard label="Total Votes" value={results?.totalVotes ?? 0} icon={Users} color="#0F2D5E" />
               <StatCard label="Eligible Delegates" value={results?.totalDelegates ?? 0} icon={Users} color="#2c5282" />
               <StatCard label="Participation" value={`${participation}%`} icon={BarChart3} color="#7c3aed" />

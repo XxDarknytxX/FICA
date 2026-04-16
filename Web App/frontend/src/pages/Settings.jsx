@@ -37,9 +37,10 @@ const SETTING_FIELDS = [
     fields: [
       { key: "registration_open", label: "Registration Open", type: "bool", hint: "Controls whether new delegate accounts can self-register." },
       { key: "mobile_app_enabled", label: "Mobile App Enabled", type: "bool", hint: "Master kill-switch for the iOS + Android apps." },
-      { key: "voting_open", label: "Voting Open", type: "bool", hint: "When on, delegates can cast / change their vote for the best project." },
-      // Panel discussions are now gated per-panel — open/close each one from
-      // the "Panel Discussions" page in the sidebar.
+      // Voting open/closed + results visibility now live on the Projects &
+      // Voting page (Event Projects tab → Results) for context-appropriate
+      // control next to the project list and leaderboard.
+      // Panel discussions are gated per-panel on the Panel Discussions page.
     ]
   },
 ];
