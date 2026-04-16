@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import Layout from "../components/Layout";
 import PageHeader from "../components/PageHeader";
-import { api } from "../services/api";
+import { api, isModerator } from "../services/api";
 import {
   Toast, useToast, StatCard, IconBtn, Chip, SegmentedTabs,
   LoadingState, EmptyState, ActionModal, ConfirmModal,
@@ -41,6 +41,9 @@ export default function Projects() {
   const [voterModal, setVoterModal] = useState(null);
   const [voters, setVoters] = useState([]);
   const { message, show } = useToast();
+  // The per-project voter list endpoint is admin-only for privacy, so
+  // moderators don't see the "View voters" icon.
+  const canSeeVoters = !isModerator();
 
   // Fetch both the project list and the live vote results every time the
   // page mounts so the control strip + tab content are both always up
@@ -274,13 +277,15 @@ export default function Projects() {
                         <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>{p.vote_count || 0}</div>
                         <div style={{ fontSize: 10, color: "#94a3b8" }}>votes</div>
                       </div>
-                      <IconBtn
-                        Icon={Eye}
-                        color="#0F2D5E"
-                        bg="#eef2ff"
-                        title="View voters"
-                        onClick={() => showVoters(p.id)}
-                      />
+                      {canSeeVoters && (
+                        <IconBtn
+                          Icon={Eye}
+                          color="#0F2D5E"
+                          bg="#eef2ff"
+                          title="View voters"
+                          onClick={() => showVoters(p.id)}
+                        />
+                      )}
                     </div>
                   );
                 })

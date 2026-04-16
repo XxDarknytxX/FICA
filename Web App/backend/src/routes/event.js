@@ -139,10 +139,22 @@ export function makeEventRouter(controller) {
   mod.put("/panels/questions/:id/read", controller.setPanelQuestionRead);
   mod.delete("/panels/questions/:id", controller.dismissPanelQuestion);
 
-  // Mount both sub-routers at the root. Order doesn't matter — the two
-  // route tables don't overlap.
-  r.use(admin);
+  // Mount mod FIRST, then admin. Order matters: `admin.use(requireAdmin)`
+  // fires on every request entering the admin sub-router, including paths
+  // that don't have an admin route defined — so if admin is mounted first
+  // a moderator token hitting /announcements (a mod-allowed path) would
+  // 403 on the admin middleware before ever reaching mod.
+  //
+  // With mod first:
+  //   • moderator → /announcements  : mod matches, handler runs.
+  //   • moderator → /speakers       : mod has no match, falls through to
+  //                                    admin, requireAdmin 403s correctly.
+  //   • admin     → /speakers       : mod has no match, falls through,
+  //                                    requireAdmin passes, handler runs.
+  //   • admin     → /announcements  : mod matches (requireAdminOrModerator
+  //                                    also accepts admin), handler runs.
   r.use(mod);
+  r.use(admin);
 
   return r;
 }
