@@ -19,7 +19,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Minify + shrink the release APK/AAB. Strips unused classes,
+            // obfuscates names where safe, and makes reverse-engineering
+            // harder. proguard-rules.pro keeps Gson models, the Retrofit
+            // interface, and EncryptedSharedPreferences intact.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

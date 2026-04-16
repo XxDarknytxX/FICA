@@ -270,5 +270,105 @@ Never commit these. They live on the VPS only:
 | Apple Developer cert/provisioning   | Managed in Xcode Keychain    |
 
 The `.gitignore` already covers `.env`, `.env.local`, and build
-artefacts. Run `git check-ignore -v <path>` to verify before adding
+artefacts. Run `git check-ignore -v `<path>` to verify before adding
 anything sensitive.
+
+### JWT_SECRET strength requirements
+
+The backend now refuses to start if `JWT_SECRET` is missing, shorter
+than 32 characters, or one of a handful of common dev defaults
+(`dev-secret-change-me`, `change-me`, `secret`, `password`, `jwt-secret`,
+`your-secret-here`). Generate a strong one if yours doesn't meet this
+bar:
+
+```bash
+openssl rand -base64 48
+```
+
+Paste the output into `.env` as `JWT_SECRET=...`, then restart PM2.
+
+---
+
+## 🛡️ After a security-sensitive deploy — rotate secrets
+
+When a deploy includes auth/crypto changes (like the hardening pass
+that introduced this section), treat every secret that could have been
+known to the old code as compromised and rotate it. Do these on the
+VPS, in this order:
+
+### 1. Rotate `JWT_SECRET`
+All existing admin + delegate sessions will be invalidated — everyone
+has to log in again.
+
+```bash
+cd "/opt/fica/Web App/backend"
+# Generate and swap in a fresh 48-byte base64 secret
+NEW=$(openssl rand -base64 48)
+# Back up the current .env just in case
+cp .env .env.bak.$(date +%Y%m%d-%H%M%S)
+# Replace the JWT_SECRET line (GNU sed)
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$NEW|" .env
+# Restart so the new secret is loaded
+pm2 restart fica-api
+```
+
+### 2. Rotate the MySQL password
+```bash
+mysql -u root -p
+```
+```sql
+ALTER USER 'fica'@'%' IDENTIFIED BY '<new-strong-password>';
+FLUSH PRIVILEGES;
+EXIT;
+```
+Then update `.env` with the new `DATABASE_PASSWORD` and restart PM2.
+
+### 3. Rotate SMTP app password
+If you use a Gmail app password, regenerate it in the Google account
+and paste into `.env` as `SMTP_PASS`. Restart PM2. Send yourself a
+test email from the admin panel's SMTP test button to confirm.
+
+### 4. Confirm secrets aren't in git history
+```bash
+cd /opt/fica
+git log --all --full-history -p -- "Web App/backend/.env"
+```
+This should return nothing. If it doesn't, rewrite history with
+`git filter-repo` and force-push.
+
+### 5. Force every mobile client to upgrade
+Step 1 already invalidated mobile session tokens, so the apps will
+hit their login screen on next open. If you also shipped a new mobile
+build alongside the backend changes:
+- iOS: push a TestFlight build, notify testers.
+- Android: push an internal-track build in Play Console.
+
+No in-app force-upgrade nag exists today (that's a future add) — relying
+on the invalidated JWT to push users through the new login flow is
+enough for now.
+
+### 6. Confirm the hardening is live
+Run these from your laptop after the restart:
+
+```bash
+# Public admin register must be gone — expect 401
+curl -sS -X POST -H "Content-Type: application/json" \
+     -d '{"email":"evil@x.com","password":"abcd1234"}' \
+     https://eventsfiji.cloud/api/register
+
+# Admin endpoint with a delegate JWT must 403
+curl -sS -H "Authorization: Bearer <DELEGATE_JWT>" \
+     https://eventsfiji.cloud/api/event/speakers
+
+# WebSocket without ?token=… must be rejected
+# (use wscat -c 'wss://eventsfiji.cloud/ws' — expect 401 upgrade failure)
+
+# Rate limiter kicks in at request 11
+for i in $(seq 1 11); do
+  curl -sS -o /dev/null -w "%{http_code}\n" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"x@y","password":"bad"}' \
+    https://eventsfiji.cloud/api/login
+done
+# → first 10 should be 400 ("Invalid credentials"), 11th should be 429.
+```
