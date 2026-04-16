@@ -814,7 +814,7 @@ function UserModal({ modal, onClose, onSaved, onError }) {
         <div style={{ padding: 22, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
           {/* Account type picker — CREATE only */}
           {!isEdit && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
               <TypeCard
                 Icon={Monitor}
                 label="Web Admin"
@@ -848,7 +848,7 @@ function UserModal({ modal, onClose, onSaved, onError }) {
           {/* Delegate fields (name + org + job_title + phone + ticket) */}
           {scope === "delegate" && (
             <>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
                 <Field label="Full Name *">
                   <input
                     className="input"

@@ -6,6 +6,10 @@ import {
 import Layout from "../components/Layout";
 import PageHeader from "../components/PageHeader";
 import { api, isModerator } from "../services/api";
+import { useLiveSocket } from "../hooks/useLiveSocket";
+import {
+  LiveSwitch, LiveDot, Chip as LiveChip, StatTile, PageTitle, SmoothCount,
+} from "../components/live";
 import {
   Toast, useToast, StatCard, IconBtn, Chip, SegmentedTabs,
   LoadingState, EmptyState, ActionModal, ConfirmModal,
@@ -44,6 +48,13 @@ export default function Projects() {
   // The per-project voter list endpoint is admin-only for privacy, so
   // moderators don't see the "View voters" icon.
   const canSeeVoters = !isModerator();
+
+  // Live sync — pick up voting toggles flipped from the dashboard or
+  // another admin tab without waiting for the next reload.
+  const { connected } = useLiveSocket({
+    voting_open_changed: (d) => setVotingOpen(!!d.voting_open),
+    voting_results_visibility_changed: (d) => setResultsVisible(!!d.voting_results_visible),
+  });
 
   // Fetch both the project list and the live vote results every time the
   // page mounts so the control strip + tab content are both always up
@@ -150,20 +161,20 @@ export default function Projects() {
 
   return (
     <Layout>
-      <div style={{ padding: "8px 0 28px" }} className="animate-in">
-        <PageHeader
+      <div style={{ paddingBottom: 28 }} className="animate-in">
+        <PageTitle
           title="Projects & Voting"
           subtitle="Showcase delegate projects and run live voting"
-          action={tab === "manage" ? (
+          connected={connected}
+          right={tab === "manage" ? (
             <GoldBtn onClick={openAdd}><Plus size={15} /> Add Project</GoldBtn>
           ) : null}
         />
 
         <Toast message={message} />
 
-        {/* Always-visible Voting Control Center — the two toggles that
-            define what delegates can do, surfaced above the tab control
-            so admins never have to go hunting for them. */}
+        {/* Voting Control Center — unified design matching the moderator
+            dashboard. Live switches push state to every delegate instantly. */}
         <VotingControlCenter
           votingOpen={votingOpen}
           resultsVisible={resultsVisible}
@@ -196,11 +207,10 @@ export default function Projects() {
               subtitle="Add your first project for delegates to explore and vote on."
             />
           ) : (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-              gap: 14,
-            }}>
+            <div
+              className="fluid-grid wide"
+              style={{ gap: 14 }}
+            >
               {projects.map(p => (
                 <ProjectCard
                   key={p.id}
@@ -312,7 +322,7 @@ export default function Projects() {
             </>
           }
         >
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
             <Field label="Project name" required full>
               <input
                 className="input"
@@ -521,122 +531,60 @@ function VotingControlCenter({
   onRequestToggleVoting, onToggleResults,
 }) {
   return (
-    <div
-      className="card"
-      style={{
-        padding: 0, marginBottom: 14,
-        overflow: "hidden",
-        display: "flex",
-        flexWrap: "wrap",            // ← each panel wraps its own row when the viewport tightens
-        borderTop: "3px solid",
-        borderTopColor: votingOpen ? "#48bb78" : "#fca5a5",
-      }}
-    >
-      <VotingPanel
-        tone={votingOpen ? "on" : "off"}
-        label={votingOpen ? "Voting is open" : "Voting is closed"}
-        sub={votingOpen ? "Delegates can cast and change votes" : "Delegates cannot vote right now"}
-        actionLabel={votingOpen ? "Close voting" : "Open voting"}
-        onAction={onRequestToggleVoting}
-        Icon={Power}
-        ctaColor={votingOpen ? "#dc2626" : "#059669"}
-      />
-      <VotingPanel
-        tone={resultsVisible ? "visible" : "hidden"}
-        label={resultsVisible ? "Results are visible" : "Results are hidden"}
-        sub={resultsVisible ? "Delegates can see the live tally" : "Delegates only see their own vote"}
-        actionLabel={resultsVisible ? "Hide results" : "Reveal results"}
-        onAction={onToggleResults}
-        Icon={resultsVisible ? EyeOff : Eye}
-        ctaColor={resultsVisible ? "#475569" : "#6b21a8"}
-        bordered
-      />
-
-      {/* Stats rail — fills remaining row at wide widths, full-width when
-          wrapped below on narrower screens. */}
-      <div
-        style={{
-          flex: "1 1 200px",
-          padding: "14px 18px",
-          borderLeft: "1px solid #e2e8f0",
-          background: "#fafbfc",
-          display: "flex", flexDirection: "column", justifyContent: "center",
-          gap: 6,
-        }}
-      >
-        <StatPair label="Votes" value={totalVotes} color="#0F2D5E" />
-        <StatPair label="Eligible" value={totalDelegates} color="#2c5282" />
-        <StatPair label="Participation" value={`${participation}%`} color="#7c3aed" />
-      </div>
-    </div>
-  );
-}
-
-function VotingPanel({ tone, label, sub, actionLabel, onAction, Icon, ctaColor, bordered }) {
-  const isLive = tone === "on" || tone === "visible";
-  const accentColor = tone === "on" ? "#276749"
-                    : tone === "off" ? "#c53030"
-                    : tone === "visible" ? "#6b21a8"
-                    : "#475569";
-  return (
-    <div style={{
-      flex: "1 1 360px",            // ← minimum 360px; wraps when row can't fit two panels side by side
-      padding: "16px 18px",
-      display: "flex", alignItems: "center", gap: 14,
-      flexWrap: "wrap",             // ← CTA button falls below text instead of crushing it
-      borderLeft: bordered ? "1px solid #e2e8f0" : "none",
-    }}>
-      {/* Status dot */}
-      <div style={{
-        width: 10, height: 10, borderRadius: "50%",
-        background: accentColor,
-        boxShadow: `0 0 0 4px ${accentColor}22`,
-        flexShrink: 0,
-      }} />
-
-      <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-        <div style={{
-          fontSize: 11, fontWeight: 700,
-          color: accentColor,
-          textTransform: "uppercase", letterSpacing: "0.05em",
-        }}>
-          {isLive ? "Live" : "Paused"}
+    <div className="fluid-grid" style={{ marginBottom: 16 }}>
+      <div className="live-card" data-active={votingOpen || undefined}>
+        <div className="live-card-head">
+          <div className="live-card-head-left">
+            <div className="live-card-icon">
+              <Power size={18} />
+            </div>
+            <div className="live-card-title">Voting</div>
+          </div>
+          <LiveSwitch
+            checked={!!votingOpen}
+            onChange={() => onRequestToggleVoting()}
+            labelOn="Open"
+            labelOff="Closed"
+            ariaLabel="Voting"
+          />
         </div>
-        <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginTop: 2 }}>
-          {label}
-        </div>
-        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-          {sub}
+        <div className="live-card-sub">
+          {votingOpen
+            ? "Delegates can cast and change votes."
+            : "Delegates cannot vote right now."}
         </div>
       </div>
 
-      <button
-        onClick={onAction}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 7,
-          padding: "9px 14px", borderRadius: 10, border: "none", cursor: "pointer",
-          background: ctaColor, color: "white",
-          fontSize: 13, fontWeight: 700,
-          boxShadow: `0 2px 6px ${ctaColor}40`,
-          flexShrink: 0,
-        }}
-      >
-        <Icon size={14} />
-        {actionLabel}
-      </button>
-    </div>
-  );
-}
+      <div className="live-card" data-active={resultsVisible || undefined}>
+        <div className="live-card-head">
+          <div className="live-card-head-left">
+            <div className="live-card-icon">
+              {resultsVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+            </div>
+            <div className="live-card-title">Show results</div>
+          </div>
+          <LiveSwitch
+            checked={!!resultsVisible}
+            onChange={() => onToggleResults()}
+            labelOn="Shown"
+            labelOff="Hidden"
+            ariaLabel="Show results to delegates"
+          />
+        </div>
+        <div className="live-card-sub">
+          {resultsVisible
+            ? "Delegates can see the live tally."
+            : "Delegates only see their own vote — admins still see the leaderboard."}
+        </div>
+      </div>
 
-function StatPair({ label, value, color }) {
-  return (
-    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-      <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 16, fontWeight: 800, color }}>
-        {value}
-      </span>
+      <StatTile
+        icon={Users}
+        label="Votes cast"
+        value={<SmoothCount value={totalVotes} />}
+        hint={`of ${totalDelegates} eligible · ${participation}% turnout`}
+        tone={participation >= 50 ? "navy" : undefined}
+      />
     </div>
   );
 }
