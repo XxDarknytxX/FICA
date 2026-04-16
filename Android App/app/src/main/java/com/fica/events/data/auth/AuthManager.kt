@@ -14,10 +14,23 @@ object AuthManager {
     private const val KEY_CURRENT_USER = "fica_current_user"
 
     private lateinit var prefs: SharedPreferences
+    private lateinit var appContext: Context
     private val gson = Gson()
 
     fun init(context: Context) {
-        prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        appContext = context.applicationContext
+        prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // One-shot migration: if an older build left the JWT in plain
+        // SharedPreferences, copy it into SecureStore (encrypted at rest)
+        // and wipe the plaintext. Users stay logged in across the upgrade.
+        val legacy = prefs.getString(KEY_AUTH_TOKEN, null)
+        if (legacy != null && SecureStore.get(appContext, KEY_AUTH_TOKEN) == null) {
+            SecureStore.set(appContext, KEY_AUTH_TOKEN, legacy)
+        }
+        if (legacy != null) {
+            prefs.edit().remove(KEY_AUTH_TOKEN).apply()
+        }
 
         // Restore token to ApiClient if it exists
         token?.let { ApiClient.updateToken(it) }
@@ -34,18 +47,10 @@ object AuthManager {
     val isAuthenticated: Boolean
         get() = token != null
 
+    // Token now lives in EncryptedSharedPreferences via SecureStore.
     var token: String?
-        get() = prefs.getString(KEY_AUTH_TOKEN, null)
-        set(value) {
-            prefs.edit().apply {
-                if (value != null) {
-                    putString(KEY_AUTH_TOKEN, value)
-                } else {
-                    remove(KEY_AUTH_TOKEN)
-                }
-                apply()
-            }
-        }
+        get() = SecureStore.get(appContext, KEY_AUTH_TOKEN)
+        set(value) { SecureStore.set(appContext, KEY_AUTH_TOKEN, value) }
 
     var currentUser: Attendee?
         get() {

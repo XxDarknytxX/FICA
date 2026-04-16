@@ -74,4 +74,8 @@ dependencies {
     // Composable splash (white background, transparent icon) instead of
     // showing the launcher icon on top of it.
     implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // EncryptedSharedPreferences — backs SecureStore.kt so the JWT is
+    // stored encrypted on disk instead of plain text in SharedPreferences.
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

@@ -14,8 +14,10 @@ class AuthService {
     private let tokenKey = "fica_auth_token"
     private let userKey = "fica_current_user"
 
+    // Token now lives in the Keychain via SecureStore. Profile stays in
+    // UserDefaults — it's non-sensitive public directory info.
     var token: String? {
-        UserDefaults.standard.string(forKey: tokenKey)
+        SecureStore.get(tokenKey)
     }
 
     var userId: Int {
@@ -23,7 +25,15 @@ class AuthService {
     }
 
     private init() {
-        if UserDefaults.standard.string(forKey: tokenKey) != nil {
+        // One-shot migration: if a prior build left the JWT in UserDefaults,
+        // copy it into the Keychain and wipe the plaintext copy so the user
+        // stays logged in but the credential is no longer iCloud-backed up.
+        if let legacyToken = UserDefaults.standard.string(forKey: tokenKey) {
+            SecureStore.set(legacyToken, forKey: tokenKey)
+            UserDefaults.standard.removeObject(forKey: tokenKey)
+        }
+
+        if SecureStore.get(tokenKey) != nil {
             isAuthenticated = true
             if let data = UserDefaults.standard.data(forKey: userKey),
                let user = try? JSONDecoder().decode(Attendee.self, from: data) {
@@ -40,7 +50,7 @@ class AuthService {
 
     func login(email: String, password: String) async throws {
         let response = try await APIService.shared.login(email: email, password: password)
-        UserDefaults.standard.set(response.token, forKey: tokenKey)
+        SecureStore.set(response.token, forKey: tokenKey)
         if let data = try? JSONEncoder().encode(response.attendee) {
             UserDefaults.standard.set(data, forKey: userKey)
         }
@@ -64,7 +74,7 @@ class AuthService {
 
     func logout() {
         ChatWebSocket.shared.disconnect()
-        UserDefaults.standard.removeObject(forKey: tokenKey)
+        SecureStore.remove(tokenKey)
         UserDefaults.standard.removeObject(forKey: userKey)
         currentUser = nil
         isAuthenticated = false
