@@ -16,9 +16,20 @@ export default function Login() {
     setErr("");
     setLoading(true);
     try {
-      const { token } = await api("/login", { method: "POST", body: { email, password }, auth: false });
+      // Backend returns { token, role } — stash both so the sidebar and
+      // page guards can read `localStorage.getItem("role")` without
+      // decoding the JWT on every render.
+      const { token, role } = await api("/login", {
+        method: "POST",
+        body: { email, password },
+        auth: false,
+      });
       localStorage.setItem("token", token);
-      navigate("/dashboard");
+      if (role) localStorage.setItem("role", role);
+      // Moderators land on their dedicated control dashboard; admins get
+      // the full overview dashboard. Both are protected routes so an
+      // intruder with just a URL still hits the login screen.
+      navigate(role === "moderator" ? "/moderator" : "/dashboard");
     } catch (e) {
       setErr(e.message);
     } finally {

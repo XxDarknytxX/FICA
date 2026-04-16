@@ -41,3 +41,27 @@ export function requireAdmin(req, res, next) {
   req.user = decoded;
   next();
 }
+
+/**
+ * Require a valid admin OR moderator JWT. Used to gate the subset of
+ * routes that moderators are allowed to hit — announcements, projects,
+ * voting toggles, panel questions moderation. Admins always pass (they
+ * have strictly more privilege than moderators).
+ */
+export function requireAdminOrModerator(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Missing token" });
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+  if (decoded?.role !== "admin" && decoded?.role !== "moderator") {
+    return res.status(403).json({ error: "Admin or moderator privileges required" });
+  }
+  req.user = decoded;
+  next();
+}

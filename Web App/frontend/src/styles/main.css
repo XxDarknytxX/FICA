@@ -434,3 +434,211 @@ select.input {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ─── Responsive: tablets + phones ──────────────────────────────────────────
+   The panel is primarily a desktop tool, but moderators will run it on
+   iPad / Android tablets during the event, and we want it to stay usable
+   on a phone in a pinch. The breakpoint at 960px splits tablet-landscape
+   (full sidebar) from tablet-portrait and below (off-canvas drawer).
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Hamburger is desktop-hidden by default; revealed at narrow widths. */
+.btn-icon.hamburger { display: none; }
+
+/* The backdrop darkens the page behind the drawer on mobile/tablet. */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 900;
+  animation: fadeIn 0.15s ease;
+}
+
+@media (max-width: 960px) {
+  .btn-icon.hamburger { display: inline-flex; }
+
+  /* Sidebar becomes an off-canvas drawer on narrow viewports. It starts
+     translated off-screen; `.mobile-open` slides it into view. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px !important;      /* override the inline sidebarWidth */
+    transform: translateX(-110%);
+    transition: transform 0.22s ease;
+    z-index: 1000;
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+
+  /* Main column reclaims the full viewport width when the sidebar is
+     hidden. */
+  .app-shell > div:last-of-type { width: 100%; }
+
+  /* Bigger tap targets on touch devices. */
+  .sidebar-item { padding: 12px 14px; font-size: 14.5px; }
+  .btn-primary, .btn-gold, .btn-ghost { min-height: 44px; }
+
+  /* Tighter paddings so content uses more of the limited screen width. */
+  main > div { padding: 16px !important; }
+}
+
+@media (max-width: 640px) {
+  /* On phones kill the centred max-width so cards span edge-to-edge. */
+  main > div { max-width: 100% !important; }
+}
+
+/* ─── Moderator Dashboard ───────────────────────────────────────────────────
+   Tablet-first layout. The dashboard is a grid of "live toggle" cards,
+   each with a big (~56px-tall) switch and label. On a phone, cards stack
+   to a single column; on tablet + desktop they fluidly fit 2-3 columns.
+   ────────────────────────────────────────────────────────────────────────── */
+.mod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.mod-toggle-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 18px 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mod-toggle-card[data-active="true"] {
+  border-color: rgba(200, 169, 81, 0.5);
+  box-shadow: 0 0 0 4px rgba(200, 169, 81, 0.08);
+}
+
+.mod-toggle-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.mod-toggle-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Chunky touch-friendly toggle — roughly iOS switch size. */
+.mod-switch {
+  --w: 64px;
+  --h: 36px;
+  position: relative;
+  width: var(--w);
+  height: var(--h);
+  border-radius: calc(var(--h) / 2);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+  flex-shrink: 0;
+}
+.mod-switch[aria-checked="true"] {
+  background: var(--gold);
+  border-color: var(--gold-dark);
+}
+.mod-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(var(--h) - 8px);
+  height: calc(var(--h) - 8px);
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+  transition: transform 0.18s ease;
+}
+.mod-switch[aria-checked="true"]::after {
+  transform: translateX(calc(var(--w) - var(--h)));
+}
+.mod-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Panel Presenter view ─────────────────────────────────────────────────
+   Large question cards optimised for reading aloud from a tablet held in
+   landscape. Questions the moderator has already read out get a struck-
+   through title and a lower opacity so the next unread one is obvious.
+   ────────────────────────────────────────────────────────────────────────── */
+.presenter-question {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px 20px;
+  align-items: start;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+.presenter-question[data-read="true"] {
+  opacity: 0.55;
+  border-color: var(--border-soft);
+}
+.presenter-question[data-read="true"] .presenter-question-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--text-subtle);
+}
+.presenter-question-text {
+  font-size: 22px;
+  line-height: 1.38;
+  color: var(--text);
+  font-weight: 500;
+  grid-column: 1 / -1;
+}
+.presenter-question-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.presenter-question-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  justify-self: end;
+}
+.presenter-action {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.presenter-action:hover { background: var(--surface-soft); }
+.presenter-action[data-variant="primary"] {
+  background: var(--gold);
+  border-color: var(--gold-dark);
+  color: var(--navy-dark);
+}
+.presenter-action[data-variant="primary"]:hover { background: var(--gold-dark); color: white; }
+.presenter-action[data-variant="danger"] { color: var(--danger); }
+.presenter-action[data-variant="danger"]:hover { background: var(--danger-soft); }
+
+@media (max-width: 640px) {
+  .presenter-question { grid-template-columns: 1fr; padding: 18px; }
+  .presenter-question-text { font-size: 18.5px; }
+  .presenter-question-actions { justify-self: start; width: 100%; }
+  .presenter-action { flex: 1; justify-content: center; }
+}

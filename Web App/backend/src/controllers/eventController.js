@@ -33,14 +33,26 @@ const DUMMY_BCRYPT_HASH = bcrypt.hashSync(
 
 export async function initEventTables(pool) {
   // Admin users table — owned by the FICA app in this dedicated database.
+  // `role` distinguishes admins (full privileges) from moderators (tabs:
+  // Announcements, Projects/Voting, Panel Discussions, plus a live-toggle
+  // dashboard). Default of 'admin' preserves behaviour for existing rows.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
       email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
+      role ENUM('admin','moderator') NOT NULL DEFAULT 'admin',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Idempotent upgrade for databases created before the role column.
+  try {
+    await pool.query(
+      "ALTER TABLE users ADD COLUMN role ENUM('admin','moderator') NOT NULL DEFAULT 'admin'"
+    );
+  } catch (e) {
+    if (!String(e.message || "").includes("Duplicate column")) throw e;
+  }
 
   // Bootstrap a default admin if the table is empty so the dashboard is usable
   // on a fresh install without running the seed.
@@ -48,7 +60,7 @@ export async function initEventTables(pool) {
   if (count === 0) {
     const hash = await bcrypt.hash("admin123", 10);
     await pool.query(
-      "INSERT INTO users (email, password_hash) VALUES (?, ?)",
+      "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')",
       ["admin@fica.com", hash]
     );
     console.log("✓ Bootstrapped default admin: admin@fica.com / admin123");
@@ -291,19 +303,34 @@ export async function initEventTables(pool) {
   `);
 
   // panel_questions: attendee-submitted questions for a specific panel session.
-  // Public — every delegate sees every question on the panel they're viewing.
+  // `moderated_at` is set by the moderator/admin once they've read a question
+  // out to the audience — used to strike the card through in the presenter
+  // view so the mod doesn't re-read the same question.
+  // `dismissed` hides a question from the moderator feed entirely (off-topic,
+  // offensive, duplicate). Delegates still see it on the public feed so we
+  // don't surprise them with mid-stream deletions.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS panel_questions (
       id INT AUTO_INCREMENT PRIMARY KEY,
       session_id INT NOT NULL,
       attendee_id INT NOT NULL,
       question TEXT NOT NULL,
+      moderated_at TIMESTAMP NULL DEFAULT NULL,
+      dismissed BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
       FOREIGN KEY (attendee_id) REFERENCES attendees(id) ON DELETE CASCADE,
       INDEX idx_panel_questions_session (session_id, created_at)
     )
   `);
+  // Idempotent upgrades for rows that existed before these columns.
+  for (const ddl of [
+    "ALTER TABLE panel_questions ADD COLUMN moderated_at TIMESTAMP NULL DEFAULT NULL",
+    "ALTER TABLE panel_questions ADD COLUMN dismissed BOOLEAN NOT NULL DEFAULT FALSE",
+  ]) {
+    try { await pool.query(ddl); }
+    catch (e) { if (!String(e.message || "").includes("Duplicate column")) throw e; }
+  }
 }
 
 export function makeEventController(pool, broadcastToUser = null, broadcastAll = null) {
@@ -766,17 +793,19 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
       `);
 
       const [admins] = await pool.query(`
-        SELECT id, email, created_at
+        SELECT id, email, role, created_at
         FROM users ORDER BY email ASC
       `);
 
-      // Normalize admin rows to match the frontend's user shape
+      // Normalize admin rows to match the frontend's user shape. Moderators
+      // share the same table but get a distinct user_type so the UI can
+      // badge them separately.
       const adminRows = admins.map(a => ({
         id: a.id,
         name: a.email.split("@")[0],
         email: a.email,
         organization: null,
-        job_title: "Administrator",
+        job_title: a.role === "moderator" ? "Moderator" : "Administrator",
         ticket_type: null,
         registration_code: null,
         account_active: 1,
@@ -789,7 +818,8 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
         check_in_day1: 0,
         check_in_day2: 0,
         created_at: a.created_at,
-        user_type: "admin",
+        user_type: a.role === "moderator" ? "moderator" : "admin",
+        role: a.role,
       }));
 
       return send.ok(res, { users: [...adminRows, ...delegates] });
@@ -1970,6 +2000,9 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   // List all questions on a panel, newest first. Each row is joined with the
   // asker's attendee record so the mobile card can show name + org + "Panel
   // Member" chip without a second lookup.
+  // Delegate view — dismissed questions are filtered out so an off-topic
+  // or abusive question disappears from every attendee's feed the moment
+  // a moderator dismisses it.
   const getPanelQuestions = async (req, res) => {
     const { id } = req.params;
     try {
@@ -1981,6 +2014,7 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
           pq.session_id,
           pq.attendee_id,
           pq.question,
+          pq.moderated_at,
           pq.created_at,
           a.name AS attendee_name,
           a.organization AS attendee_org,
@@ -1988,7 +2022,7 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
           (SELECT 1 FROM panel_members pm WHERE pm.session_id = pq.session_id AND pm.attendee_id = pq.attendee_id LIMIT 1) AS is_panel_member
         FROM panel_questions pq
         JOIN attendees a ON a.id = pq.attendee_id
-        WHERE pq.session_id = ?
+        WHERE pq.session_id = ? AND pq.dismissed = FALSE
         ORDER BY pq.created_at DESC
       `, [id]);
       const questions = rows.map(r => ({ ...r, is_panel_member: r.is_panel_member ? 1 : 0 }));
@@ -2025,7 +2059,8 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
       // returns it, so the client can append without re-fetching the list.
       const [[inserted]] = await pool.query(`
         SELECT
-          pq.id, pq.session_id, pq.attendee_id, pq.question, pq.created_at,
+          pq.id, pq.session_id, pq.attendee_id, pq.question,
+          pq.moderated_at, pq.created_at,
           a.name AS attendee_name, a.organization AS attendee_org, a.photo_url AS attendee_photo,
           (SELECT 1 FROM panel_members pm WHERE pm.session_id = pq.session_id AND pm.attendee_id = pq.attendee_id LIMIT 1) AS is_panel_member
         FROM panel_questions pq
@@ -2033,6 +2068,13 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
         WHERE pq.id = ?
       `, [result.insertId]);
       inserted.is_panel_member = inserted.is_panel_member ? 1 : 0;
+      // Live-push new questions to every WS client. The moderator's
+      // presenter view filters to the current panel; delegates viewing the
+      // same panel can also choose to subscribe for live append. Dismissed
+      // questions are never broadcast (they can't exist yet at insert time).
+      if (broadcastAll) {
+        broadcastAll("panel_question_posted", { question: inserted });
+      }
       return send.created(res, { question: inserted });
     } catch (e) {
       console.error(e);
@@ -2143,6 +2185,142 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
+  // ─── PANEL QUESTIONS (Moderator / Admin) ────────────────────────────────
+  // Presenter view — returns every question for a panel, including
+  // dismissed ones (so the moderator can see what they hid), with read /
+  // dismissed status. Sorted oldest-first so the mod can read through them
+  // in the order they came in.
+  const getModPanelQuestions = async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [[panel]] = await pool.query(
+        "SELECT id, title FROM sessions WHERE id=? AND type='panel'",
+        [id]
+      );
+      if (!panel) return send.notFound(res, "Panel not found");
+      const [rows] = await pool.query(`
+        SELECT
+          pq.id, pq.session_id, pq.attendee_id, pq.question,
+          pq.moderated_at, pq.dismissed, pq.created_at,
+          a.name AS attendee_name, a.organization AS attendee_org,
+          a.photo_url AS attendee_photo, a.job_title AS attendee_title
+        FROM panel_questions pq
+        JOIN attendees a ON a.id = pq.attendee_id
+        WHERE pq.session_id = ?
+        ORDER BY pq.created_at ASC
+      `, [id]);
+      return send.ok(res, { panel, questions: rows });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // Toggle read/unread. Body: { read: bool }. Sets moderated_at = NOW()
+  // when read=true, NULL when read=false (in case the mod taps by mistake).
+  const setPanelQuestionRead = async (req, res) => {
+    const { id } = req.params;
+    const read = req.body?.read;
+    if (typeof read !== "boolean") return send.bad(res, "read (boolean) is required");
+    try {
+      const [r] = await pool.query(
+        read
+          ? "UPDATE panel_questions SET moderated_at=NOW() WHERE id=?"
+          : "UPDATE panel_questions SET moderated_at=NULL WHERE id=?",
+        [id]
+      );
+      if (r.affectedRows === 0) return send.notFound(res, "Question not found");
+      const [[q]] = await pool.query(
+        "SELECT id, session_id, moderated_at FROM panel_questions WHERE id=?",
+        [id]
+      );
+      return send.ok(res, { question: q });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // Dismiss removes a question from the public delegate feed (soft delete
+  // — we keep the row so moderation history is auditable). Broadcasts a
+  // WS event so currently-viewing delegates see it disappear without
+  // refreshing.
+  const dismissPanelQuestion = async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [[existing]] = await pool.query(
+        "SELECT id, session_id FROM panel_questions WHERE id=?",
+        [id]
+      );
+      if (!existing) return send.notFound(res, "Question not found");
+      await pool.query("UPDATE panel_questions SET dismissed=TRUE WHERE id=?", [id]);
+      if (broadcastAll) {
+        broadcastAll("panel_question_dismissed", {
+          id: parseInt(id),
+          session_id: existing.session_id,
+        });
+      }
+      return send.ok(res, { success: true });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // ─── MODERATOR DASHBOARD (combined live state) ─────────────────────────
+  // One-shot endpoint that returns every toggle + live signal the moderator
+  // dashboard needs so the tablet UI can render with a single GET. Beats
+  // making the page fan out to five separate endpoints on every refresh.
+  const getModDashboard = async (_req, res) => {
+    try {
+      // Voting flags
+      const [flagRows] = await pool.query(
+        "SELECT setting_key, setting_value FROM event_settings WHERE setting_key IN ('voting_open','voting_results_visible')"
+      );
+      const flags = Object.fromEntries(flagRows.map(r => [r.setting_key, r.setting_value]));
+
+      // Panels today + onwards, with live question/pending counts
+      const [panels] = await pool.query(`
+        SELECT
+          s.id, s.title, s.session_date, s.start_time, s.end_time, s.room,
+          s.discussion_enabled,
+          (SELECT COUNT(*) FROM panel_questions pq WHERE pq.session_id = s.id AND pq.dismissed = FALSE) AS question_count,
+          (SELECT COUNT(*) FROM panel_questions pq WHERE pq.session_id = s.id AND pq.dismissed = FALSE AND pq.moderated_at IS NULL) AS pending_count
+        FROM sessions s
+        WHERE s.type = 'panel'
+        ORDER BY s.session_date ASC, s.start_time ASC
+      `);
+
+      // Headline counts
+      const [[{ projectCount }]] = await pool.query(
+        "SELECT COUNT(*) AS projectCount FROM projects"
+      );
+      const [[{ voteCount }]] = await pool.query(
+        "SELECT COUNT(*) AS voteCount FROM votes"
+      );
+      const [[{ announcementCount }]] = await pool.query(
+        "SELECT COUNT(*) AS announcementCount FROM announcements WHERE published = TRUE"
+      );
+
+      return send.ok(res, {
+        voting_open: flags.voting_open === "true",
+        voting_results_visible: flags.voting_results_visible === "true",
+        panels: panels.map(p => ({
+          ...p,
+          discussion_enabled: p.discussion_enabled == null ? true : Boolean(p.discussion_enabled),
+        })),
+        stats: {
+          projects: projectCount,
+          votes: voteCount,
+          published_announcements: announcementCount,
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
   return {
     getStats: getStatsNew,
     getSpeakers, createSpeaker, updateSpeaker, deleteSpeaker,
@@ -2176,5 +2354,9 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     getPanels, getPanelQuestions, postPanelQuestion,
     getPanelMembers, setPanelMembers,
     getAdminPanels, togglePanelDiscussion,
+    // Panel questions moderation (admin + moderator)
+    getModPanelQuestions, setPanelQuestionRead, dismissPanelQuestion,
+    // Moderator dashboard aggregate
+    getModDashboard,
   };
 }

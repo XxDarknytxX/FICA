@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MessageSquare, MessageSquareOff, Users, Clock, MapPin,
-  Mic2, User as UserIcon, UsersRound,
+  Mic2, User as UserIcon, UsersRound, Presentation,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import PageHeader from "../components/PageHeader";
 import PanelMembersModal from "../components/PanelMembersModal";
-import { api } from "../services/api";
+import { api, isModerator } from "../services/api";
 import {
   Toast, useToast, IconBtn, Chip, LoadingState, EmptyState,
 } from "../components/ui";
@@ -26,6 +27,11 @@ export default function Panels() {
   const [togglingId, setTogglingId] = useState(null);
   const [panelMembersFor, setPanelMembersFor] = useState(null);
   const { message, show } = useToast();
+  const navigate = useNavigate();
+  // Moderators don't own panel member assignment — admins do. Hide the
+  // "Manage members" icon for them so they can't open a modal that
+  // would just 403.
+  const showMembers = !isModerator();
 
   async function load() {
     try {
@@ -91,8 +97,10 @@ export default function Panels() {
                 panel={panel}
                 isLast={idx === panels.length - 1}
                 toggling={togglingId === panel.id}
+                showMembers={showMembers}
                 onToggleDiscussion={() => toggleDiscussion(panel)}
                 onManageMembers={() => setPanelMembersFor(panel)}
+                onPresent={() => navigate(`/panels/${panel.id}/present`)}
               />
             ))}
           </div>
@@ -113,7 +121,7 @@ export default function Panels() {
   );
 }
 
-function PanelRow({ panel, isLast, toggling, onToggleDiscussion, onManageMembers }) {
+function PanelRow({ panel, isLast, toggling, showMembers, onToggleDiscussion, onManageMembers, onPresent }) {
   const enabled = !!panel.discussion_enabled;
   return (
     <div
@@ -208,12 +216,21 @@ function PanelRow({ panel, isLast, toggling, onToggleDiscussion, onManageMembers
               disabled={toggling}
             />
             <IconBtn
-              Icon={UsersRound}
-              color="#0F2D5E"
-              bg="#eef2ff"
-              title="Manage panel members"
-              onClick={onManageMembers}
+              Icon={Presentation}
+              color="#8a6d1d"
+              bg="rgba(200,169,81,0.14)"
+              title="Open presenter view"
+              onClick={onPresent}
             />
+            {showMembers && (
+              <IconBtn
+                Icon={UsersRound}
+                color="#0F2D5E"
+                bg="#eef2ff"
+                title="Manage panel members"
+                onClick={onManageMembers}
+              />
+            )}
           </div>
         </div>
       </div>

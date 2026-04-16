@@ -31,6 +31,22 @@ export function makeAuthRouter(controller, eventController) {
   router.get("/me", requireAuth, controller.me);
   router.get("/dashboard", requireAuth, controller.dashboard);
 
+  // ─── Moderator account management (admin-only) ───────────────────────
+  // Listed here rather than on /api/event/* because these CRUD against
+  // the `users` table, which adminController already owns.
+  router.get("/moderators", requireAdmin, controller.listModerators);
+  router.post(
+    "/moderators",
+    requireAdmin,
+    [
+      body("email").isEmail().withMessage("Valid email required"),
+      body("password").isLength({ min: 6 }).withMessage("Password >= 6 chars"),
+    ],
+    controller.createModerator,
+  );
+  router.post("/moderators/:id/password", requireAdmin, controller.setModeratorPassword);
+  router.delete("/moderators/:id", requireAdmin, controller.deleteModerator);
+
   // Public: consume reset token and set new password
   if (eventController?.consumeResetToken) {
     router.post("/reset-password", eventController.consumeResetToken);

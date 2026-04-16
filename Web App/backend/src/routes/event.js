@@ -1,114 +1,148 @@
 // src/routes/event.js
 import { Router } from "express";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth, requireAdmin, requireAdminOrModerator } from "../middleware/auth.js";
 
+/**
+ * The admin panel is served from two sibling routers mounted under
+ * /api/event:
+ *
+ *   • `requireAdmin`              — everything attendee/speaker/session
+ *                                    related, plus user management and
+ *                                    directory/messaging/meetings admin.
+ *   • `requireAdminOrModerator`   — the four tabs a moderator is given:
+ *                                    announcements, projects & voting,
+ *                                    panel discussions, and the aggregate
+ *                                    moderator dashboard.
+ *
+ * Using two sub-routers rather than a single `r.use(...)` + per-handler
+ * checks means a missed check can't accidentally leak an admin-only
+ * endpoint to a moderator — if it's declared on the `admin` sub-router,
+ * the middleware rejects non-admins at the router boundary.
+ */
 export function makeEventRouter(controller) {
   const r = Router();
 
-  // Every admin event route now enforces role === "admin" (previously
-  // only requireAuth, which let delegate tokens through unchallenged).
-  r.use(requireAdmin);
+  // ─── ADMIN-ONLY SUB-ROUTER ────────────────────────────────────────────
+  const admin = Router();
+  admin.use(requireAdmin);
 
   // Stats
-  r.get("/stats", controller.getStats);
+  admin.get("/stats", controller.getStats);
 
   // Speakers
-  r.get("/speakers", controller.getSpeakers);
-  r.post("/speakers", controller.createSpeaker);
-  r.put("/speakers/:id", controller.updateSpeaker);
-  r.delete("/speakers/:id", controller.deleteSpeaker);
+  admin.get("/speakers", controller.getSpeakers);
+  admin.post("/speakers", controller.createSpeaker);
+  admin.put("/speakers/:id", controller.updateSpeaker);
+  admin.delete("/speakers/:id", controller.deleteSpeaker);
 
   // Sessions / Agenda
-  r.get("/sessions", controller.getSessions);
-  r.post("/sessions", controller.createSession);
-  r.put("/sessions/:id", controller.updateSession);
-  r.delete("/sessions/:id", controller.deleteSession);
+  admin.get("/sessions", controller.getSessions);
+  admin.post("/sessions", controller.createSession);
+  admin.put("/sessions/:id", controller.updateSession);
+  admin.delete("/sessions/:id", controller.deleteSession);
 
   // Sponsors
-  r.get("/sponsors", controller.getSponsors);
-  r.post("/sponsors", controller.createSponsor);
-  r.put("/sponsors/:id", controller.updateSponsor);
-  r.delete("/sponsors/:id", controller.deleteSponsor);
+  admin.get("/sponsors", controller.getSponsors);
+  admin.post("/sponsors", controller.createSponsor);
+  admin.put("/sponsors/:id", controller.updateSponsor);
+  admin.delete("/sponsors/:id", controller.deleteSponsor);
 
   // Networking events
-  r.get("/networking", controller.getNetworking);
-  r.post("/networking", controller.createNetworking);
-  r.put("/networking/:id", controller.updateNetworking);
-  r.delete("/networking/:id", controller.deleteNetworking);
+  admin.get("/networking", controller.getNetworking);
+  admin.post("/networking", controller.createNetworking);
+  admin.put("/networking/:id", controller.updateNetworking);
+  admin.delete("/networking/:id", controller.deleteNetworking);
 
   // Attendees (registration management)
-  r.get("/attendees", controller.getAttendees);
-  r.post("/attendees", controller.createAttendee);
-  r.put("/attendees/:id", controller.updateAttendee);
-  r.delete("/attendees/:id", controller.deleteAttendee);
-  r.post("/attendees/:id/checkin", controller.checkInAttendee);
-
-  // Announcements
-  r.get("/announcements", controller.getAnnouncements);
-  r.post("/announcements", controller.createAnnouncement);
-  r.put("/announcements/:id", controller.updateAnnouncement);
-  r.delete("/announcements/:id", controller.deleteAnnouncement);
+  admin.get("/attendees", controller.getAttendees);
+  admin.post("/attendees", controller.createAttendee);
+  admin.put("/attendees/:id", controller.updateAttendee);
+  admin.delete("/attendees/:id", controller.deleteAttendee);
+  admin.post("/attendees/:id/checkin", controller.checkInAttendee);
 
   // Settings
-  r.get("/settings", controller.getSettings);
-  r.put("/settings", controller.updateSettings);
+  admin.get("/settings", controller.getSettings);
+  admin.put("/settings", controller.updateSettings);
 
-  // ─── User / Account Management ──────────────────────────────────────────
-  r.get("/users", controller.getUsers);
-  r.post("/users/:id/password", controller.setUserPassword);
-  r.post("/users/:id/toggle", controller.toggleUserActive);
-  r.put("/users/:id/profile", controller.updateUserProfile);
-  r.post("/users/:id/send-onboarding", controller.sendUserOnboarding);
-  r.post("/users/:id/send-reset", controller.sendUserResetPassword);
-  r.put("/users/:id", controller.updateUser);
-  r.delete("/users/:id", controller.deleteUser);
+  // User / Account Management
+  admin.get("/users", controller.getUsers);
+  admin.post("/users/:id/password", controller.setUserPassword);
+  admin.post("/users/:id/toggle", controller.toggleUserActive);
+  admin.put("/users/:id/profile", controller.updateUserProfile);
+  admin.post("/users/:id/send-onboarding", controller.sendUserOnboarding);
+  admin.post("/users/:id/send-reset", controller.sendUserResetPassword);
+  admin.put("/users/:id", controller.updateUser);
+  admin.delete("/users/:id", controller.deleteUser);
 
-  // ─── SMTP test ──────────────────────────────────────────────────────────
-  r.post("/settings/test-smtp", controller.sendTestSmtp);
+  // SMTP test
+  admin.post("/settings/test-smtp", controller.sendTestSmtp);
 
-  // ─── Attendee Directory (networking) ────────────────────────────────────
-  r.get("/directory", controller.getDirectory);
-  r.get("/directory/:id", controller.getAttendeeProfile);
+  // Attendee Directory (networking)
+  admin.get("/directory", controller.getDirectory);
+  admin.get("/directory/:id", controller.getAttendeeProfile);
 
-  // ─── Messaging ───────────────────────────────────────────────────────────
-  r.get("/messages", controller.getMessages);
-  r.get("/messages/conversation", controller.getConversation);
-  r.get("/messages/stats", controller.getMessageStats);
-  r.post("/messages", controller.sendMessage);
-  r.delete("/messages/:id", controller.deleteMessage);
+  // Messaging
+  admin.get("/messages", controller.getMessages);
+  admin.get("/messages/conversation", controller.getConversation);
+  admin.get("/messages/stats", controller.getMessageStats);
+  admin.post("/messages", controller.sendMessage);
+  admin.delete("/messages/:id", controller.deleteMessage);
 
-  // ─── Connections ─────────────────────────────────────────────────────────
-  r.get("/connections", controller.getConnections);
-  r.post("/connections", controller.createConnection);
-  r.put("/connections/:id", controller.updateConnectionStatus);
-  r.delete("/connections/:id", controller.deleteConnection);
+  // Connections
+  admin.get("/connections", controller.getConnections);
+  admin.post("/connections", controller.createConnection);
+  admin.put("/connections/:id", controller.updateConnectionStatus);
+  admin.delete("/connections/:id", controller.deleteConnection);
 
-  // ─── Networking Stats ──────────────────────────────────────────────────
-  r.get("/networking-stats", controller.getNetworkingStats);
+  // Networking Stats
+  admin.get("/networking-stats", controller.getNetworkingStats);
 
-  // ─── Meetings ──────────────────────────────────────────────────────────
-  r.get("/meetings", controller.getMeetings);
-  r.post("/meetings", controller.createMeeting);
-  r.put("/meetings/:id", controller.updateMeeting);
-  r.delete("/meetings/:id", controller.deleteMeeting);
+  // Meetings
+  admin.get("/meetings", controller.getMeetings);
+  admin.post("/meetings", controller.createMeeting);
+  admin.put("/meetings/:id", controller.updateMeeting);
+  admin.delete("/meetings/:id", controller.deleteMeeting);
 
-  // ─── Projects & Voting ────────────────────────────────────────────────
-  r.get("/projects", controller.getProjects);
-  r.post("/projects", controller.createProject);
-  r.put("/projects/:id", controller.updateProject);
-  r.delete("/projects/:id", controller.deleteProject);
-  r.get("/votes/results", controller.getVoteResults);
-  r.get("/votes/details/:projectId", controller.getVoteDetails);
-  r.post("/votes/toggle", controller.toggleVoting);
-  r.post("/votes/toggle-results", controller.toggleVotingResults);
+  // Vote details (per-project voter list) — admin-only for privacy
+  admin.get("/votes/details/:projectId", controller.getVoteDetails);
 
-  // Panel member management
-  r.get("/panel-members/:sessionId", controller.getPanelMembers);
-  r.put("/panel-members/:sessionId", controller.setPanelMembers);
+  // Panel member assignment — admin-only (controls who's on stage)
+  admin.get("/panel-members/:sessionId", controller.getPanelMembers);
+  admin.put("/panel-members/:sessionId", controller.setPanelMembers);
 
-  // Panel admin — list + per-panel open/close toggle
-  r.get("/panels", controller.getAdminPanels);
-  r.put("/panels/:id/discussion", controller.togglePanelDiscussion);
+  // ─── ADMIN OR MODERATOR SUB-ROUTER ────────────────────────────────────
+  const mod = Router();
+  mod.use(requireAdminOrModerator);
+
+  // Aggregate dashboard — one GET to render the moderator control tablet
+  mod.get("/mod-dashboard", controller.getModDashboard);
+
+  // Announcements
+  mod.get("/announcements", controller.getAnnouncements);
+  mod.post("/announcements", controller.createAnnouncement);
+  mod.put("/announcements/:id", controller.updateAnnouncement);
+  mod.delete("/announcements/:id", controller.deleteAnnouncement);
+
+  // Projects & Voting
+  mod.get("/projects", controller.getProjects);
+  mod.post("/projects", controller.createProject);
+  mod.put("/projects/:id", controller.updateProject);
+  mod.delete("/projects/:id", controller.deleteProject);
+  mod.get("/votes/results", controller.getVoteResults);
+  mod.post("/votes/toggle", controller.toggleVoting);
+  mod.post("/votes/toggle-results", controller.toggleVotingResults);
+
+  // Panels — list + discussion open/close + question moderation
+  mod.get("/panels", controller.getAdminPanels);
+  mod.put("/panels/:id/discussion", controller.togglePanelDiscussion);
+  mod.get("/panels/:id/questions", controller.getModPanelQuestions);
+  mod.put("/panels/questions/:id/read", controller.setPanelQuestionRead);
+  mod.delete("/panels/questions/:id", controller.dismissPanelQuestion);
+
+  // Mount both sub-routers at the root. Order doesn't matter — the two
+  // route tables don't overlap.
+  r.use(admin);
+  r.use(mod);
 
   return r;
 }

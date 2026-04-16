@@ -1,56 +1,83 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, Mic2, Award, Users, Bell,
   Settings, LogOut, Coffee, ChevronsLeft, ChevronsRight,
   UserCog, Trophy, Bell as BellIcon, Search, MessageSquare,
+  Menu, X, Sliders,
 } from "lucide-react";
+import { getAuthRole } from "../services/api";
 
 // ─── Sidebar nav structure ───────────────────────────────────────────────
+// Each item now carries `roles` — the list of account roles that can see
+// it in the sidebar. Admin-only links stay admin-only even if a moderator
+// manually navigates to their URL (the page itself still renders; role
+// enforcement lives on the backend).
+const ADMIN_ONLY = ["admin"];
+const BOTH = ["admin", "moderator"];
+
 const navSections = [
   {
     label: "Overview",
     items: [
-      { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+      { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", roles: ADMIN_ONLY },
+      // Moderator Control Center — compact tablet-friendly dashboard
+      // with every live toggle in one place.
+      { to: "/moderator", icon: Sliders, label: "Moderator Control", roles: ["moderator"] },
     ],
   },
   {
     label: "Event",
     items: [
-      { to: "/agenda", icon: Calendar, label: "Agenda" },
-      { to: "/speakers", icon: Mic2, label: "Speakers" },
-      { to: "/sponsors", icon: Award, label: "Sponsors" },
-      { to: "/networking", icon: Coffee, label: "Networking" },
-      { to: "/announcements", icon: Bell, label: "Announcements" },
-      { to: "/panels", icon: MessageSquare, label: "Panel Discussions" },
+      { to: "/agenda", icon: Calendar, label: "Agenda", roles: ADMIN_ONLY },
+      { to: "/speakers", icon: Mic2, label: "Speakers", roles: ADMIN_ONLY },
+      { to: "/sponsors", icon: Award, label: "Sponsors", roles: ADMIN_ONLY },
+      { to: "/networking", icon: Coffee, label: "Networking", roles: ADMIN_ONLY },
+      { to: "/announcements", icon: Bell, label: "Announcements", roles: BOTH },
+      { to: "/panels", icon: MessageSquare, label: "Panel Discussions", roles: BOTH },
     ],
   },
   {
     label: "Delegates",
     items: [
-      { to: "/attendees", icon: Users, label: "Attendees" },
-      { to: "/projects", icon: Trophy, label: "Projects & Voting" },
+      { to: "/attendees", icon: Users, label: "Attendees", roles: ADMIN_ONLY },
+      { to: "/projects", icon: Trophy, label: "Projects & Voting", roles: BOTH },
     ],
   },
   {
     label: "Admin",
     items: [
-      { to: "/users", icon: UserCog, label: "User Management" },
-      { to: "/settings", icon: Settings, label: "Settings" },
+      { to: "/users", icon: UserCog, label: "User Management", roles: ADMIN_ONLY },
+      { to: "/moderators", icon: Sliders, label: "Moderators", roles: ADMIN_ONLY },
+      { to: "/settings", icon: Settings, label: "Settings", roles: ADMIN_ONLY },
     ],
   },
 ];
 
-// Flat lookup for breadcrumb
-const allItems = navSections.flatMap((s) => s.items);
+// Return the sections filtered + items filtered for the given role.
+// Empty sections are dropped so the moderator sidebar doesn't have orphan
+// group labels like "Delegates" with nothing under them.
+function filterNavForRole(role) {
+  return navSections
+    .map((s) => ({ ...s, items: s.items.filter((i) => i.roles.includes(role)) }))
+    .filter((s) => s.items.length > 0);
+}
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  // On narrow viewports (<=768px) the sidebar becomes an off-canvas drawer
+  // rather than a fixed column. `mobileOpen` controls the drawer visibility.
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
 
+  // Role-filtered sidebar. Memoised so switching routes doesn't rebuild
+  // the filtered list on every render.
+  const role = getAuthRole() || "admin";
+  const sections = useMemo(() => filterNavForRole(role), [role]);
+  const allItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   // Close profile menu on outside click
   useEffect(() => {
     function onClick(e) {
@@ -62,8 +89,15 @@ export default function Layout({ children }) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  // Close the mobile drawer whenever the route changes — tapping a link
+  // on a tablet should navigate AND dismiss the drawer.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   function logout() {
     localStorage.removeItem("token");
+    localStorage.removeItem("role");
     navigate("/login");
   }
 
@@ -71,10 +105,18 @@ export default function Layout({ children }) {
   const sidebarWidth = collapsed ? 64 : 232;
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
+    <div className="app-shell" style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
+      {/* ─── Mobile drawer backdrop ───────────────────────────────────── */}
+      {mobileOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
       {/* ─── Sidebar ──────────────────────────────────────────────────── */}
       <aside
-        className="sidebar"
+        className={`sidebar${mobileOpen ? " mobile-open" : ""}`}
         style={{
           width: sidebarWidth,
           flexShrink: 0,
@@ -119,7 +161,7 @@ export default function Layout({ children }) {
               <div style={{ lineHeight: 1.1 }}>
                 <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700 }}>FICA Congress</div>
                 <div style={{ color: "var(--text-subtle)", fontSize: 11, fontWeight: 500, marginTop: 2 }}>
-                  Admin Panel
+                  {role === "moderator" ? "Moderator Panel" : "Admin Panel"}
                 </div>
               </div>
             )}
@@ -152,7 +194,7 @@ export default function Layout({ children }) {
 
         {/* Navigation sections */}
         <nav style={{ flex: 1, overflowY: "auto", padding: collapsed ? "8px 6px 8px" : "6px 10px 8px" }}>
-          {navSections.map((section) => (
+          {sections.map((section) => (
             <div key={section.label} style={{ marginBottom: 6 }}>
               {!collapsed && <div className="sidebar-section-label">{section.label}</div>}
               {collapsed && <div style={{ height: 8 }} />}
@@ -219,8 +261,15 @@ export default function Layout({ children }) {
             flexShrink: 0,
           }}
         >
-          {/* Left: page title (acts as breadcrumb) */}
+          {/* Left: hamburger (mobile) + page title */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              className="btn-icon hamburger"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            >
+              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
             {currentItem?.icon && (
               <currentItem.icon size={16} color="var(--text-subtle)" />
             )}
@@ -293,51 +342,57 @@ export default function Layout({ children }) {
                   }}
                 >
                   <div style={{ padding: "14px 16px 12px", borderBottom: "1px solid var(--border-soft)" }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>Admin User</div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>admin@fica.org.fj</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>
+                      {role === "moderator" ? "Moderator" : "Admin User"}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                      {role === "moderator" ? "Moderator account" : "admin@fica.org.fj"}
+                    </div>
                     <div
                       style={{
                         display: "inline-block",
                         marginTop: 8,
                         padding: "2px 8px",
                         borderRadius: 999,
-                        background: "rgba(15,45,94,0.08)",
-                        color: "var(--navy)",
+                        background: role === "moderator" ? "rgba(200,169,81,0.15)" : "rgba(15,45,94,0.08)",
+                        color: role === "moderator" ? "#8a6d1d" : "var(--navy)",
                         fontSize: 10,
                         fontWeight: 700,
                         letterSpacing: "0.04em",
                         textTransform: "uppercase",
                       }}
                     >
-                      Administrator
+                      {role === "moderator" ? "Moderator" : "Administrator"}
                     </div>
                   </div>
                   <div style={{ padding: 6 }}>
-                    <button
-                      onClick={() => {
-                        setProfileOpen(false);
-                        navigate("/settings");
-                      }}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "9px 12px",
-                        background: "transparent",
-                        border: "none",
-                        borderRadius: 8,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        fontSize: 13,
-                        color: "var(--text)",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-soft)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <Settings size={15} color="var(--text-muted)" />
-                      Event Settings
-                    </button>
+                    {role !== "moderator" && (
+                      <button
+                        onClick={() => {
+                          setProfileOpen(false);
+                          navigate("/settings");
+                        }}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "9px 12px",
+                          background: "transparent",
+                          border: "none",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          fontSize: 13,
+                          color: "var(--text)",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-soft)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <Settings size={15} color="var(--text-muted)" />
+                        Event Settings
+                      </button>
+                    )}
                     <button
                       onClick={logout}
                       style={{

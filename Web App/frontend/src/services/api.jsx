@@ -23,6 +23,41 @@ function authHeader() {
 }
 
 /**
+ * Read the current user's role. We stash it in localStorage at login
+ * time (the backend echoes it back alongside the token) and also fall
+ * back to decoding the JWT payload if the local copy is missing — which
+ * means older sessions that predate this change still report correctly
+ * without forcing a re-login.
+ *
+ * Returns one of: "admin" | "moderator" | "delegate" | null
+ */
+export function getAuthRole() {
+  const cached = localStorage.getItem("role");
+  if (cached) return cached;
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload?.role || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when the current user can view the full admin surface (not a
+ * moderator-only account). Used by page-level guards and by the sidebar
+ * to decide what tabs to render.
+ */
+export function isAdmin() {
+  return getAuthRole() === "admin";
+}
+
+export function isModerator() {
+  return getAuthRole() === "moderator";
+}
+
+/**
  * Generic API wrapper
  */
 export async function api(path, { method = "GET", body, auth = true } = {}) {
