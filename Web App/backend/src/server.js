@@ -31,6 +31,17 @@ function broadcastToUser(userId, event, data) {
   }
 }
 
+// Fan-out to every connected socket. Used for events that concern every
+// delegate — e.g. admin toggling a panel's discussion open/closed.
+function broadcastAll(event, data) {
+  const payload = JSON.stringify({ event, data });
+  for (const sockets of userSockets.values()) {
+    for (const ws of sockets) {
+      if (ws.readyState === 1) ws.send(payload);
+    }
+  }
+}
+
 wss.on("connection", (ws) => {
   let userId = null;
 
@@ -60,7 +71,7 @@ const pool = await getPool();
 await initEventTables(pool);
 
 const admin = makeAdminController(pool);
-const event = makeEventController(pool, broadcastToUser);
+const event = makeEventController(pool, broadcastToUser, broadcastAll);
 
 // Admin panel routes
 app.use("/api", makeAuthRouter(admin, event));

@@ -7,14 +7,25 @@ import SwiftUI
 /// combined (per-panel AND response-level) `discussionEnabled` flag.
 struct PanelDetailView: View {
     let panel: Panel
-    let discussionEnabled: Bool
+    /// Initial discussion state passed in from the list. Tracked as local
+    /// state so live WebSocket toggles from admin can update the composer
+    /// without having to navigate away + back.
+    let initialDiscussionEnabled: Bool
 
+    @State private var discussionEnabled: Bool
     @State private var questions: [PanelQuestion] = []
     @State private var isLoading = true
     @State private var draft = ""
     @State private var isPosting = false
     @State private var postError: String?
+    @State private var wsHandlerToken: UUID?
     @FocusState private var composerFocused: Bool
+
+    init(panel: Panel, discussionEnabled: Bool) {
+        self.panel = panel
+        self.initialDiscussionEnabled = discussionEnabled
+        self._discussionEnabled = State(initialValue: discussionEnabled)
+    }
 
     private var accentColor: Color {
         if let group = SessionGroup(raw: sessionGroupRaw) {
@@ -72,6 +83,30 @@ struct PanelDetailView: View {
             }
         }
         .task { await loadQuestions() }
+        .onAppear { subscribeToLiveUpdates() }
+        .onDisappear { unsubscribeFromLiveUpdates() }
+    }
+
+    // MARK: - Live updates
+
+    private func subscribeToLiveUpdates() {
+        guard wsHandlerToken == nil else { return }
+        wsHandlerToken = ChatWebSocket.shared.addPanelDiscussionHandler { [panelId = panel.id] sessionId, enabled in
+            // Only react to events for the panel we're currently viewing.
+            guard sessionId == panelId else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                discussionEnabled = enabled
+                // Clear any stale "closed" error message if we just opened.
+                if enabled { postError = nil }
+            }
+        }
+    }
+
+    private func unsubscribeFromLiveUpdates() {
+        if let token = wsHandlerToken {
+            ChatWebSocket.shared.removePanelDiscussionHandler(token)
+            wsHandlerToken = nil
+        }
     }
 
     // MARK: - Hero

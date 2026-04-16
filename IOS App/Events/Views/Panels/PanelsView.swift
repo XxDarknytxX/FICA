@@ -13,6 +13,7 @@ struct PanelsView: View {
     @State private var isLoading = true
     @State private var responseFlag = true   // backend's panel_discussion_enabled (legacy)
     @State private var errorMessage: String?
+    @State private var wsHandlerToken: UUID?
 
     private let year = CongressYear.y2026.rawValue
 
@@ -50,6 +51,44 @@ struct PanelsView: View {
             }
             .refreshable { await load() }
             .task { await load() }
+            .onAppear { subscribeToLiveUpdates() }
+            .onDisappear { unsubscribeFromLiveUpdates() }
+        }
+    }
+
+    // MARK: - Live updates
+
+    /// Listen for admin toggles broadcast over the shared WebSocket and
+    /// patch the matching panel's `discussion_enabled` in-place so the
+    /// list reflects the change without a refresh.
+    private func subscribeToLiveUpdates() {
+        guard wsHandlerToken == nil else { return }
+        wsHandlerToken = ChatWebSocket.shared.addPanelDiscussionHandler { sessionId, enabled in
+            if let idx = panels.firstIndex(where: { $0.id == sessionId }) {
+                // Panel is a struct — rebuild the element with the new flag
+                // so SwiftUI picks up the change.
+                let old = panels[idx]
+                let updated = Panel(
+                    id: old.id, title: old.title, description: old.description,
+                    session_date: old.session_date, start_time: old.start_time, end_time: old.end_time,
+                    room: old.room,
+                    speaker_name: old.speaker_name, speaker_title: old.speaker_title,
+                    speaker_org: old.speaker_org, speaker_photo: old.speaker_photo,
+                    moderator: old.moderator, congress_year: old.congress_year,
+                    question_count: old.question_count, is_panel_member: old.is_panel_member,
+                    discussion_enabled: enabled
+                )
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    panels[idx] = updated
+                }
+            }
+        }
+    }
+
+    private func unsubscribeFromLiveUpdates() {
+        if let token = wsHandlerToken {
+            ChatWebSocket.shared.removePanelDiscussionHandler(token)
+            wsHandlerToken = nil
         }
     }
 

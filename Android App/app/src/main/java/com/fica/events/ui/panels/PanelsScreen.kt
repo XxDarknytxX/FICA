@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fica.events.data.api.ApiClient
+import com.fica.events.data.api.ChatWebSocket
 import com.fica.events.data.models.CongressYear
 import com.fica.events.data.models.Panel
 import com.fica.events.ui.components.AvatarView
@@ -94,6 +96,18 @@ fun PanelsScreen(onOpenPanel: (Int) -> Unit) {
         isLoading = panels.isEmpty()
         load()
         isLoading = false
+    }
+
+    // Live update listener — admin flipping a panel's discussion open or
+    // closed is pushed over the shared WebSocket; patch the matching row
+    // in state so the list reflects the change without refresh.
+    DisposableEffect(Unit) {
+        val token = ChatWebSocket.addPanelDiscussionHandler { sessionId, enabled ->
+            panels = panels.map { p ->
+                if (p.id == sessionId) p.copy(discussion_enabled = enabled) else p
+            }
+        }
+        onDispose { ChatWebSocket.removePanelDiscussionHandler(token) }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(FICABg)) {

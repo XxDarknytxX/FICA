@@ -295,7 +295,7 @@ export async function initEventTables(pool) {
   `);
 }
 
-export function makeEventController(pool, broadcastToUser = null) {
+export function makeEventController(pool, broadcastToUser = null, broadcastAll = null) {
   // ─── STATS ────────────────────────────────────────────────────────────────
   const getStats = async (_req, res) => {
     try {
@@ -1899,6 +1899,9 @@ export function makeEventController(pool, broadcastToUser = null) {
   };
 
   // Flip a single panel's discussion open/closed. Body: { enabled: bool }.
+  // Broadcasts the change to every connected WS client so any delegate
+  // currently on the Panels list or a detail screen gets the flip pushed
+  // live — no pull-to-refresh needed.
   const togglePanelDiscussion = async (req, res) => {
     const { id } = req.params;
     const enabled = req.body?.enabled;
@@ -1909,6 +1912,12 @@ export function makeEventController(pool, broadcastToUser = null) {
         [enabled ? 1 : 0, id]
       );
       if (r.affectedRows === 0) return send.notFound(res, "Panel not found");
+      if (broadcastAll) {
+        broadcastAll("panel_discussion_changed", {
+          session_id: parseInt(id),
+          discussion_enabled: enabled,
+        });
+      }
       return send.ok(res, { id: parseInt(id), discussion_enabled: enabled });
     } catch (e) {
       console.error(e);

@@ -26,6 +26,11 @@ object ChatWebSocket {
     // Global handler for chat list refresh
     var onAnyMessage: ((Message) -> Unit)? = null
 
+    // Panel discussion open/close flips, broadcast from the admin UI.
+    // (sessionId, discussionEnabled) — tokenised so the list and a
+    // currently-open detail screen can subscribe independently.
+    private val panelDiscussionHandlers = mutableMapOf<java.util.UUID, (Int, Boolean) -> Unit>()
+
     fun connect(userId: Int) {
         if (webSocket != null) return
         this.userId = userId
@@ -60,6 +65,7 @@ object ChatWebSocket {
         webSocket = null
         conversationHandlers.clear()
         onAnyMessage = null
+        panelDiscussionHandlers.clear()
     }
 
     fun addConversationHandler(myId: Int, otherId: Int, handler: (Message) -> Unit) {
@@ -72,20 +78,39 @@ object ChatWebSocket {
         conversationHandlers.remove(key)
     }
 
+    /** Subscribe to live panel discussion open/close events. Keep the
+     *  returned token and pass it to [removePanelDiscussionHandler] on
+     *  dispose so the singleton doesn't leak stale observers. */
+    fun addPanelDiscussionHandler(handler: (sessionId: Int, enabled: Boolean) -> Unit): java.util.UUID {
+        val id = java.util.UUID.randomUUID()
+        panelDiscussionHandlers[id] = handler
+        return id
+    }
+
+    fun removePanelDiscussionHandler(id: java.util.UUID) {
+        panelDiscussionHandlers.remove(id)
+    }
+
     private fun handleMessage(text: String) {
         try {
             val json = JsonParser.parseString(text).asJsonObject
             val event = json.get("event")?.asString ?: return
-            if (event != "new_message") return
-
-            val message = gson.fromJson(json.get("data"), Message::class.java)
-
-            // Notify conversation-specific handler
-            val key = "${minOf(message.sender_id, message.receiver_id)}-${maxOf(message.sender_id, message.receiver_id)}"
-            conversationHandlers[key]?.invoke(message)
-
-            // Notify global handler
-            onAnyMessage?.invoke(message)
+            when (event) {
+                "new_message" -> {
+                    val message = gson.fromJson(json.get("data"), Message::class.java)
+                    val key = "${minOf(message.sender_id, message.receiver_id)}-${maxOf(message.sender_id, message.receiver_id)}"
+                    conversationHandlers[key]?.invoke(message)
+                    onAnyMessage?.invoke(message)
+                }
+                "panel_discussion_changed" -> {
+                    val data = json.get("data")?.asJsonObject ?: return
+                    val sessionId = data.get("session_id")?.asInt ?: return
+                    val enabled = data.get("discussion_enabled")?.asBoolean ?: return
+                    // Copy to avoid ConcurrentModification if a handler
+                    // unregisters itself during iteration.
+                    panelDiscussionHandlers.values.toList().forEach { it(sessionId, enabled) }
+                }
+            }
         } catch (_: Exception) {}
     }
 }

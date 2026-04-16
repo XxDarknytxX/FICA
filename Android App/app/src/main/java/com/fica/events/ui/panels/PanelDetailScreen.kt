@@ -40,6 +40,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fica.events.data.api.ApiClient
+import com.fica.events.data.api.ChatWebSocket
 import com.fica.events.data.models.Panel
 import com.fica.events.data.models.PanelQuestion
 import com.fica.events.data.models.PostPanelQuestionRequest
@@ -128,6 +130,19 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
         scope.launch { loadPanelMeta() }
         loadQuestions()
         isLoadingQuestions = false
+    }
+
+    // Live updates — admin toggling this panel's discussion open/closed
+    // flows through the shared WebSocket; flip the composer on/off
+    // without waiting for the next re-fetch.
+    DisposableEffect(panelId) {
+        val token = ChatWebSocket.addPanelDiscussionHandler { sessionId, enabled ->
+            if (sessionId == panelId) {
+                discussionEnabled = enabled
+                if (enabled) postError = null
+            }
+        }
+        onDispose { ChatWebSocket.removePanelDiscussionHandler(token) }
     }
 
     val canSubmit = discussionEnabled && !isPosting && draft.trim().isNotEmpty()
