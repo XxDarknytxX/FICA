@@ -1468,7 +1468,32 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
         "INSERT INTO event_settings (setting_key, setting_value) VALUES ('voting_open', ?) ON DUPLICATE KEY UPDATE setting_value=?",
         [String(open), String(open)]
       );
+      // Push the flip to every delegate so their UI updates without refresh.
+      if (broadcastAll) {
+        broadcastAll("voting_open_changed", { voting_open: !!open });
+      }
       return send.ok(res, { votingOpen: open });
+    } catch (e) {
+      console.error(e);
+      return send.serverErr(res);
+    }
+  };
+
+  // Toggle whether vote tallies are visible to delegates. When hidden,
+  // delegates still see the project list and their own vote, but every
+  // project's vote_count is reported as 0 and total/leaderboard UI is
+  // suppressed on the mobile side. The admin leaderboard is unaffected.
+  const toggleVotingResults = async (req, res) => {
+    const { visible } = req.body;
+    try {
+      await pool.query(
+        "INSERT INTO event_settings (setting_key, setting_value) VALUES ('voting_results_visible', ?) ON DUPLICATE KEY UPDATE setting_value=?",
+        [String(visible), String(visible)]
+      );
+      if (broadcastAll) {
+        broadcastAll("voting_results_visibility_changed", { voting_results_visible: !!visible });
+      }
+      return send.ok(res, { votingResultsVisible: !!visible });
     } catch (e) {
       console.error(e);
       return send.serverErr(res);
@@ -1479,7 +1504,7 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
   const getDelegateProjects = async (req, res) => {
     const attendeeId = req.user.id;
     try {
-      const [projects] = await pool.query(`
+      const [rows] = await pool.query(`
         SELECT p.*, COUNT(v.id) AS vote_count,
           MAX(CASE WHEN v.attendee_id = ? THEN 1 ELSE 0 END) AS voted_for_this
         FROM projects p
@@ -1490,9 +1515,28 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
       const [myVoteRow] = await pool.query("SELECT project_id FROM votes WHERE attendee_id=?", [attendeeId]);
       const has_voted = myVoteRow.length > 0;
       const my_vote_project_id = has_voted ? myVoteRow[0].project_id : null;
-      const [settingRow] = await pool.query("SELECT setting_value FROM event_settings WHERE setting_key='voting_open'");
-      const voting_open = settingRow.length > 0 && settingRow[0].setting_value === "true";
-      return send.ok(res, { projects, has_voted, my_vote_project_id, voting_open });
+
+      // Read both voting flags in one round-trip.
+      const [flagRows] = await pool.query(
+        "SELECT setting_key, setting_value FROM event_settings WHERE setting_key IN ('voting_open','voting_results_visible')"
+      );
+      const flags = Object.fromEntries(flagRows.map(r => [r.setting_key, r.setting_value]));
+      const voting_open = flags.voting_open === "true";
+      // Hidden by default so results are private until admin explicitly
+      // opens them — matches the user's request.
+      const voting_results_visible = flags.voting_results_visible === "true";
+
+      // Scrub vote counts when results aren't supposed to be visible.
+      // Delegate can still see `voted_for_this` (their own vote) so the
+      // "You voted for X" confirmation in the mobile app keeps working.
+      const projects = voting_results_visible
+        ? rows
+        : rows.map(p => ({ ...p, vote_count: 0 }));
+
+      return send.ok(res, {
+        projects, has_voted, my_vote_project_id,
+        voting_open, voting_results_visible,
+      });
     } catch (e) {
       console.error(e);
       return send.serverErr(res);
@@ -1952,7 +1996,7 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     getMeetings, createMeeting, updateMeeting, deleteMeeting,
     // Projects & Voting
     getProjects, createProject, updateProject, deleteProject,
-    getVoteResults, getVoteDetails, toggleVoting,
+    getVoteResults, getVoteDetails, toggleVoting, toggleVotingResults,
     getDelegateProjects, castVote, removeVote,
     // Panel Discussion
     getPanels, getPanelQuestions, postPanelQuestion,

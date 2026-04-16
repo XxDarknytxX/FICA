@@ -99,6 +99,7 @@ export function makeEventRouter(controller) {
   r.get("/votes/results", controller.getVoteResults);
   r.get("/votes/details/:projectId", controller.getVoteDetails);
   r.post("/votes/toggle", controller.toggleVoting);
+  r.post("/votes/toggle-results", controller.toggleVotingResults);
 
   // Panel member management
   r.get("/panel-members/:sessionId", controller.getPanelMembers);

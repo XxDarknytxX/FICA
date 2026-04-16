@@ -297,6 +297,7 @@ async function seed() {
     ["currency", "FJD"],
     ["timezone", "Pacific/Fiji"],
     ["voting_open", "true"],
+    ["voting_results_visible", "false"],
     ["current_congress_year", "2026"],
     ["panel_discussion_enabled", "true"],
   ];
