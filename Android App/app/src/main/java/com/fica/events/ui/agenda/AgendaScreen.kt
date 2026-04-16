@@ -105,7 +105,15 @@ fun AgendaScreen() {
     }
 
     LaunchedEffect(selectedCongress) {
-        isLoading = sessions.isEmpty()
+        // Year switches always show the loader and drop the previous
+        // year's sessions. The old "isLoading = sessions.isEmpty()" was
+        // optimistic UI that worked for pull-to-refresh but caused a
+        // "No sessions found" flash on year change: the in-memory list
+        // still held the previous year's data, the day filter excluded
+        // all of it, and the EmptyStateView rendered for a beat before
+        // the fetch returned.
+        sessions = emptyList()
+        isLoading = true
         loadSessions()
         isLoading = false
     }
