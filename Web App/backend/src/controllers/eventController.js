@@ -1906,19 +1906,33 @@ export function makeEventController(pool, broadcastToUser = null, broadcastAll =
     }
   };
 
-  // DELETE /api/event/users/:id  body: { scope: 'admin'|'delegate' }
+  // DELETE /api/event/users/:id  body: { scope: 'admin'|'moderator'|'delegate' }
+  // Admins and moderators both live in the `users` table, so we route the
+  // "admin panel" scopes to the same DELETE. The last-admin lockout only
+  // counts role='admin' rows — deleting the last moderator is fine.
   const deleteUser = async (req, res) => {
     const { id } = req.params;
-    const scope = req.body?.scope === "admin" ? "admin" : "delegate";
+    const bodyScope = req.body?.scope;
+    const scope = bodyScope === "admin" || bodyScope === "moderator" ? bodyScope : "delegate";
     try {
-      if (scope === "admin") {
-        // Prevent deleting the last admin — lockout guard
-        const [[{ count }]] = await pool.query("SELECT COUNT(*) as count FROM users");
-        if (count <= 1) {
-          return send.bad(res, "Cannot delete the last admin. Create another admin first.");
+      if (scope === "admin" || scope === "moderator") {
+        // Prevent deleting the last admin — lockout guard. Only count
+        // admins, not moderators.
+        if (scope === "admin") {
+          const [[{ count }]] = await pool.query(
+            "SELECT COUNT(*) as count FROM users WHERE role='admin'"
+          );
+          if (count <= 1) {
+            return send.bad(res, "Cannot delete the last admin. Create another admin first.");
+          }
         }
-        const [r] = await pool.query("DELETE FROM users WHERE id=?", [id]);
-        if (r.affectedRows === 0) return send.notFound(res, "Admin not found");
+        const [r] = await pool.query(
+          "DELETE FROM users WHERE id=? AND role=?",
+          [id, scope]
+        );
+        if (r.affectedRows === 0) {
+          return send.notFound(res, scope === "admin" ? "Admin not found" : "Moderator not found");
+        }
       } else {
         const [r] = await pool.query("DELETE FROM attendees WHERE id=?", [id]);
         if (r.affectedRows === 0) return send.notFound(res, "Delegate not found");

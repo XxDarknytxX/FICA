@@ -48,7 +48,6 @@ const navSections = [
     label: "Admin",
     items: [
       { to: "/users", icon: UserCog, label: "User Management", roles: ADMIN_ONLY },
-      { to: "/moderators", icon: Sliders, label: "Moderators", roles: ADMIN_ONLY },
       { to: "/settings", icon: Settings, label: "Settings", roles: ADMIN_ONLY },
     ],
   },

@@ -9,7 +9,6 @@ import Attendees from "./pages/Attendees";
 import Announcements from "./pages/Announcements";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
-import Moderators from "./pages/Moderators";
 import Projects from "./pages/Projects";
 import Panels from "./pages/Panels";
 import PanelPresenter from "./pages/PanelPresenter";
@@ -56,7 +55,6 @@ export default function App() {
         <Route path="/attendees" element={<AdminOnly><Attendees /></AdminOnly>} />
         <Route path="/settings" element={<AdminOnly><Settings /></AdminOnly>} />
         <Route path="/users" element={<AdminOnly><UserManagement /></AdminOnly>} />
-        <Route path="/moderators" element={<AdminOnly><Moderators /></AdminOnly>} />
 
         {/* Moderator-accessible pages (admins also land here via their
             sidebar). Backend enforces role on the endpoints they call. */}

@@ -4,7 +4,7 @@ import {
   UserPlus, Search, Monitor, Smartphone, UserCog,
   Mail, KeyRound, Pencil, Shield, ShieldOff, Trash2,
   Eye, EyeOff, Copy, RefreshCw, X, AlertTriangle, Check,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, Sliders,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import PageHeader from "../components/PageHeader";
@@ -104,15 +104,20 @@ export default function UserManagement() {
   }
 
   function askDelete(user) {
-    const label = user.user_type === "admin" ? "admin" : "delegate";
+    const label =
+      user.user_type === "admin" ? "admin"
+      : user.user_type === "moderator" ? "moderator"
+      : "delegate";
     const name = user.name || user.email;
+    const consequence =
+      user.user_type === "admin"
+        ? "They'll lose access to the admin dashboard immediately."
+        : user.user_type === "moderator"
+          ? "They'll be signed out of the moderator control center on their next request."
+          : "All their profile data, messages, connections and votes will also be removed.";
     setConfirmModal({
       title: `Delete ${label}`,
-      message: `Permanently delete ${name} (${user.email})? ${
-        user.user_type === "admin"
-          ? "They'll lose access to the admin dashboard immediately."
-          : "All their profile data, messages, connections and votes will also be removed."
-      } This cannot be undone.`,
+      message: `Permanently delete ${name} (${user.email})? ${consequence} This cannot be undone.`,
       tone: "danger",
       confirmLabel: "Delete Account",
       action: async () => {
@@ -137,6 +142,7 @@ export default function UserManagement() {
 
   const filtered = users.filter(u => {
     if (filterSource === "admin" && u.user_type !== "admin") return false;
+    if (filterSource === "moderator" && u.user_type !== "moderator") return false;
     if (filterSource === "delegate" && u.user_type !== "delegate") return false;
 
     const q = search.toLowerCase();
@@ -154,6 +160,7 @@ export default function UserManagement() {
 
   const delegates = users.filter(u => u.user_type === "delegate");
   const adminsCount = users.filter(u => u.user_type === "admin").length;
+  const moderatorsCount = users.filter(u => u.user_type === "moderator").length;
   const active = delegates.filter(u => u.has_password && u.account_active).length;
   const withAccount = delegates.filter(u => u.has_password).length;
   const noAccount = delegates.filter(u => !u.has_password).length;
@@ -214,6 +221,7 @@ export default function UserManagement() {
             { label: "Account Set", value: withAccount, color: "#2c5282" },
             { label: "No Account Yet", value: noAccount, color: "#c53030" },
             { label: "Admin Users", value: adminsCount, color: "#7c3aed" },
+            { label: "Moderators", value: moderatorsCount, color: "#8a6d1d" },
           ].map(s => (
             <div key={s.label} className="card" style={{ padding: "16px 18px" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#718096", textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -242,10 +250,11 @@ export default function UserManagement() {
             </div>
 
             {/* Source tabs */}
-            <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 10, padding: 4 }}>
+            <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 10, padding: 4, flexWrap: "wrap" }}>
               {[
                 { value: "all", label: "All", icon: UserCog, count: users.length },
                 { value: "admin", label: "Admin", icon: Monitor, count: adminsCount },
+                { value: "moderator", label: "Moderator", icon: Sliders, count: moderatorsCount },
                 { value: "delegate", label: "Mobile", icon: Smartphone, count: delegates.length },
               ].map(f => {
                 const Icon = f.icon;
@@ -348,6 +357,8 @@ export default function UserManagement() {
    ═════════════════════════════════════════════════════════════════════════════ */
 function UserRow({ user, isLast, actionLoading, onEdit, onOnboard, onReset, onToggle, onDelete }) {
   const isAdmin = user.user_type === "admin";
+  const isModerator = user.user_type === "moderator";
+  const isStaff = isAdmin || isModerator;      // anything in the `users` table
   const isInactive = user.has_password && !user.account_active;
   const hasNoAccount = !user.has_password;
   const displayName = user.name || user.email.split("@")[0];
@@ -379,7 +390,9 @@ function UserRow({ user, isLast, actionLoading, onEdit, onOnboard, onReset, onTo
               ? "#94a3b8"
               : isAdmin
                 ? "linear-gradient(135deg, #7c3aed, #9333ea)"
-                : "linear-gradient(135deg, #0F2D5E, #1a4080)",
+                : isModerator
+                  ? "linear-gradient(135deg, #C8A951, #a88a38)"
+                  : "linear-gradient(135deg, #0F2D5E, #1a4080)",
             color: "white",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 14, fontWeight: 700,
@@ -408,13 +421,13 @@ function UserRow({ user, isLast, actionLoading, onEdit, onOnboard, onReset, onTo
             <span style={{
               display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5,
               padding: "2px 8px", borderRadius: 999, fontWeight: 700,
-              background: isAdmin ? "#f5f3ff" : "#eef2ff",
-              color: isAdmin ? "#7c3aed" : "#0F2D5E",
-              border: `1px solid ${isAdmin ? "#ddd6fe" : "#c7d2fe"}`,
+              background: isAdmin ? "#f5f3ff" : isModerator ? "rgba(200,169,81,0.15)" : "#eef2ff",
+              color: isAdmin ? "#7c3aed" : isModerator ? "#8a6d1d" : "#0F2D5E",
+              border: `1px solid ${isAdmin ? "#ddd6fe" : isModerator ? "rgba(200,169,81,0.4)" : "#c7d2fe"}`,
               textTransform: "uppercase", letterSpacing: "0.04em",
             }}>
-              {isAdmin ? <Monitor size={10} /> : <Smartphone size={10} />}
-              {isAdmin ? "Admin" : "Mobile"}
+              {isAdmin ? <Monitor size={10} /> : isModerator ? <Sliders size={10} /> : <Smartphone size={10} />}
+              {isAdmin ? "Admin" : isModerator ? "Moderator" : "Mobile"}
             </span>
 
             {/* Ticket type */}
@@ -466,30 +479,36 @@ function UserRow({ user, isLast, actionLoading, onEdit, onOnboard, onReset, onTo
 
       {/* Right: action icons */}
       <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-        <IconBtn
-          onClick={onOnboard}
-          loading={actionLoading === k("onboard")}
-          color="#2563eb"
-          bg="#eff6ff"
-          title="Send onboarding email"
-          Icon={Mail}
-        />
-        <IconBtn
-          onClick={onReset}
-          loading={actionLoading === k("reset")}
-          color="#d97706"
-          bg="#fffbeb"
-          title="Send password reset email"
-          Icon={KeyRound}
-        />
+        {/* Email flows are wired for admin + delegate only; moderators
+            have their password set directly via the Edit modal. */}
+        {!isModerator && (
+          <IconBtn
+            onClick={onOnboard}
+            loading={actionLoading === k("onboard")}
+            color="#2563eb"
+            bg="#eff6ff"
+            title="Send onboarding email"
+            Icon={Mail}
+          />
+        )}
+        {!isModerator && (
+          <IconBtn
+            onClick={onReset}
+            loading={actionLoading === k("reset")}
+            color="#d97706"
+            bg="#fffbeb"
+            title="Send password reset email"
+            Icon={KeyRound}
+          />
+        )}
         <IconBtn
           onClick={onEdit}
           color="#7c3aed"
           bg="#f5f3ff"
-          title="Edit account"
+          title={isModerator ? "Edit moderator / reset password" : "Edit account"}
           Icon={Pencil}
         />
-        {!isAdmin && Boolean(user.has_password) && (
+        {!isStaff && Boolean(user.has_password) && (
           <IconBtn
             onClick={onToggle}
             loading={actionLoading === k("toggle")}
@@ -652,6 +671,23 @@ function UserModal({ modal, onClose, onSaved, onError }) {
       setSaving(true);
 
       if (isEdit) {
+        // Moderators don't have any editable fields beyond password. Hit
+        // the dedicated moderator password endpoint if a new password
+        // was entered; the `users` row's email is intentionally not
+        // editable here (drop a new one and delete the old if needed).
+        if (scope === "moderator") {
+          if (!form.password) {
+            onSaved("No changes to save");
+            return;
+          }
+          await api(`/moderators/${editingUser.id}/password`, {
+            method: "POST",
+            body: { password: form.password },
+          });
+          onSaved(`Moderator password updated for ${editingUser.email}`);
+          return;
+        }
+
         await api(`/event/users/${editingUser.id}`, {
           method: "PUT",
           body: {
@@ -676,10 +712,18 @@ function UserModal({ modal, onClose, onSaved, onError }) {
       if (scope === "admin") {
         await api("/register", {
           method: "POST",
-          auth: false,
           body: { email: form.email, password: form.password },
         });
         onSaved(`Admin account created for ${form.email}`);
+        return;
+      }
+
+      if (scope === "moderator") {
+        await api("/moderators", {
+          method: "POST",
+          body: { email: form.email, password: form.password },
+        });
+        onSaved(`Moderator account created for ${form.email}`);
         return;
       }
 
@@ -748,8 +792,10 @@ function UserModal({ modal, onClose, onSaved, onError }) {
             </h3>
             <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#94a3b8" }}>
               {isEdit
-                ? scope === "admin" ? "Update admin account details" : "Update delegate account details"
-                : "Add a new admin or mobile delegate"}
+                ? scope === "admin" ? "Update admin account details"
+                  : scope === "moderator" ? "Update moderator / reset password"
+                  : "Update delegate account details"
+                : "Add a new admin, moderator, or mobile delegate"}
             </p>
           </div>
           <button
@@ -768,20 +814,29 @@ function UserModal({ modal, onClose, onSaved, onError }) {
         <div style={{ padding: 22, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
           {/* Account type picker — CREATE only */}
           {!isEdit && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
               <TypeCard
                 Icon={Monitor}
                 label="Web Admin"
-                desc="Signs into the admin dashboard"
+                desc="Full admin dashboard"
                 active={scope === "admin"}
                 color="#7c3aed"
                 bg="#f5f3ff"
                 onClick={() => switchScope("admin")}
               />
               <TypeCard
+                Icon={Sliders}
+                label="Moderator"
+                desc="Live control center + panel Q&A"
+                active={scope === "moderator"}
+                color="#8a6d1d"
+                bg="rgba(200,169,81,0.12)"
+                onClick={() => switchScope("moderator")}
+              />
+              <TypeCard
                 Icon={Smartphone}
                 label="Mobile Delegate"
-                desc="Signs into the FICA mobile app"
+                desc="FICA mobile app"
                 active={scope === "delegate"}
                 color="#0F2D5E"
                 bg="#eef2ff"
@@ -871,6 +926,34 @@ function UserModal({ modal, onClose, onSaved, onError }) {
                 placeholder="admin@fica.org.fj"
               />
             </Field>
+          )}
+
+          {/* Moderator (just email — no name/org) */}
+          {scope === "moderator" && (
+            <>
+              <Field label="Email *">
+                <input
+                  type="email"
+                  className="input"
+                  value={form.email}
+                  onChange={e => setField("email", e.target.value)}
+                  placeholder="moderator@fica.org.fj"
+                />
+              </Field>
+              <div
+                style={{
+                  background: "rgba(200,169,81,0.08)",
+                  border: "1px solid rgba(200,169,81,0.3)",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  fontSize: 12,
+                  color: "#8a6d1d",
+                  lineHeight: 1.5,
+                }}
+              >
+                Moderators only see Announcements, Projects &amp; Voting, Panel Discussions, and the live Control Center — designed for running the event from a tablet on stage.
+              </div>
+            </>
           )}
 
           {/* Password with generator */}
