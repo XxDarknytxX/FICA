@@ -458,8 +458,18 @@ struct HomeView: View {
         // Unique image URLs across sponsors, speakers, session speaker
         // thumbnails, and the keynote-row avatar placeholders. Set dedupes
         // when the same speaker shows up in multiple sessions.
+        //
+        // Sponsors whose logo_url resolves to a bundled asset are skipped
+        // entirely — there's nothing to prefetch, the PNG is already in
+        // the app. This stops the whole dashboard from waiting on a
+        // network round-trip that we don't need to take.
         var urlStrings = Set<String>()
-        sponsorsRes.forEach { if let u = $0.logo_url { urlStrings.insert(u) } }
+        sponsorsRes.forEach { sp in
+            guard let u = sp.logo_url else { return }
+            if SponsorImage.bundledAsset(for: u) == nil {
+                urlStrings.insert(u)
+            }
+        }
         speakersRes.forEach { if let u = $0.photo_url { urlStrings.insert(u) } }
         sessionsRes.forEach { if let u = $0.speaker_photo { urlStrings.insert(u) } }
         // Avatar fallbacks (ui-avatars.com) for speakers without a photo —

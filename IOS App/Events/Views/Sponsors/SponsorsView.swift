@@ -111,10 +111,15 @@ struct SponsorsView: View {
         isLoading = sponsors.isEmpty
         let fetched = (try? await APIService.shared.getSponsors()) ?? []
 
-        // Preload every logo into the shared ImageCache before committing
-        // state, so the list paints in one frame with all logos visible.
-        let urls = Array(Set(fetched.compactMap { $0.logo_url })).compactMap(URL.init)
-        await ImageCache.shared.preload(urls)
+        // Preload only the logos that AREN'T bundled in the app. Bundled
+        // ones render from Assets.xcassets synchronously — preloading
+        // their URLs would just block this screen on unnecessary network.
+        let urls = Array(Set(
+            fetched.compactMap { $0.logo_url }.filter { SponsorImage.bundledAsset(for: $0) == nil }
+        )).compactMap(URL.init)
+        if !urls.isEmpty {
+            await ImageCache.shared.preload(urls)
+        }
 
         sponsors = fetched
         isLoading = false

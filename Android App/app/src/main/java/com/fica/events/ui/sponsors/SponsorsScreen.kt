@@ -108,9 +108,17 @@ fun SponsorsScreen(onBack: () -> Unit) {
             val resp = ApiClient.service.getSponsors(year = CongressYear.Y2026.year)
             val fetched = resp.body()?.sponsors ?: emptyList()
 
-            // Warm Coil's cache for every logo before committing state, so
-            // the sponsor list paints once with logos already decoded.
-            val urls = fetched.mapNotNull { it.logo_url?.takeIf(String::isNotBlank) }.distinct()
+            // Warm Coil's cache only for logos that AREN'T bundled. The 10
+            // packaged sponsors render from res/drawable synchronously —
+            // preloading their URLs would block this screen on HTTP calls
+            // we don't need to make. For the FICA 2026 roster every logo
+            // is bundled, so in practice this loop is a no-op here; kept
+            // defensive for any future non-bundled sponsor added via the
+            // admin panel.
+            val urls = fetched
+                .mapNotNull { it.logo_url?.takeIf(String::isNotBlank) }
+                .filter { SponsorImage.bundledResFor(it) == null }
+                .distinct()
             if (urls.isNotEmpty()) {
                 val loader = context.imageLoader
                 coroutineScope {

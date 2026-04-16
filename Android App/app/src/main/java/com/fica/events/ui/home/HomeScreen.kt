@@ -188,11 +188,17 @@ fun HomeScreen(
                 val sponsorsData = sponsorsDeferred.await().body()?.sponsors ?: emptyList()
                 val eventsData = eventsDeferred.await().body()?.slots ?: emptyList()
 
-                // Every remote image URL the dashboard will render. Deduped
-                // because the same speaker photo shows up in both the
-                // Keynotes strip and session cards.
+                // Every REMOTE image URL the dashboard will render, deduped.
+                // Sponsors whose logo_url resolves to a bundled drawable
+                // are skipped — those render from res/drawable instantly,
+                // no preload needed. Keeps the dashboard from waiting on
+                // HTTP calls it's never going to make.
                 val imageUrls = (
-                    sponsorsData.mapNotNull { it.logo_url?.takeIf(String::isNotBlank) } +
+                    sponsorsData.mapNotNull {
+                        it.logo_url
+                            ?.takeIf(String::isNotBlank)
+                            ?.takeIf { url -> SponsorImage.bundledResFor(url) == null }
+                    } +
                     speakersData.mapNotNull { it.photo_url?.takeIf(String::isNotBlank) } +
                     sessionsData.mapNotNull { it.speaker_photo?.takeIf(String::isNotBlank) }
                 ).distinct()
