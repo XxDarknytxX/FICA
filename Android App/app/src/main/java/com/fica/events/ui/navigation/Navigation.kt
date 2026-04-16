@@ -25,8 +25,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Icon
@@ -60,7 +60,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.fica.events.data.auth.AuthManager
 import com.fica.events.ui.agenda.AgendaScreen
-import com.fica.events.ui.announcements.AnnouncementsScreen
+import com.fica.events.ui.panels.PanelsScreen
+import com.fica.events.ui.panels.PanelDetailScreen
 import com.fica.events.ui.auth.LoginScreen
 import com.fica.events.ui.auth.SplashScreen
 import com.fica.events.ui.home.HomeScreen
@@ -92,7 +93,7 @@ sealed class Tab(val route: String, val label: String, val icon: ImageVector) {
     data object Agenda : Tab("tab_agenda", "Agenda", Icons.Default.CalendarMonth)
     data object Vote : Tab("tab_vote", "Vote", Icons.Default.ThumbUp)
     data object Network : Tab("tab_network", "Network", Icons.Default.People)
-    data object Updates : Tab("tab_updates", "Updates", Icons.Default.Notifications)
+    data object Panels : Tab("tab_panels", "Panels", Icons.Default.Forum)
 }
 
 object NestedRoutes {
@@ -102,9 +103,10 @@ object NestedRoutes {
     const val SPONSOR_DETAIL = "sponsor/{id}"
     const val SESSION_DETAIL = "session/{id}"
     const val CONVERSATION = "conversation/{otherId}/{otherName}"
+    const val PANEL_DETAIL = "panel/{id}"
 }
 
-private val tabs = listOf(Tab.Home, Tab.Agenda, Tab.Vote, Tab.Network, Tab.Updates)
+private val tabs = listOf(Tab.Home, Tab.Agenda, Tab.Vote, Tab.Network, Tab.Panels)
 
 // ── Top-level nav host (auth gating) ────────────────────────────────────────
 
@@ -203,9 +205,19 @@ fun MainScreen(rootNavController: androidx.navigation.NavHostController = rememb
                     },
                 )
             }
-            composable(Tab.Updates.route) {
+            composable(Tab.Panels.route) {
                 showTabBar = true
-                AnnouncementsScreen()
+                PanelsScreen(
+                    onOpenPanel = { id -> tabNavController.navigate("panel/$id") },
+                )
+            }
+            composable("panel/{id}") { backStackEntry ->
+                showTabBar = false
+                val panelId = backStackEntry.arguments?.getString("id")?.toIntOrNull() ?: return@composable
+                PanelDetailScreen(
+                    panelId = panelId,
+                    onBack = { tabNavController.popBackStack() },
+                )
             }
             composable(NestedRoutes.SPEAKERS) {
                 showTabBar = true

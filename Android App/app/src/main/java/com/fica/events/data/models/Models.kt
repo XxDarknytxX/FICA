@@ -294,6 +294,58 @@ data class EventSettingsResponse(
     val settings: Map<String, String>
 )
 
+// MARK: - Panel Discussion
+
+/**
+ * A panel session enriched with the logged-in attendee's membership flag
+ * and the live question count, returned from `/api/delegate/panels`.
+ */
+data class Panel(
+    val id: Int,
+    val title: String,
+    val description: String? = null,
+    val session_date: String? = null,
+    val start_time: String? = null,
+    val end_time: String? = null,
+    val room: String? = null,
+    val speaker_name: String? = null,
+    val speaker_title: String? = null,
+    val speaker_org: String? = null,
+    val speaker_photo: String? = null,
+    val moderator: String? = null,
+    val congress_year: Int? = null,
+    val question_count: Int? = null,
+    val is_panel_member: Int? = null,
+) {
+    val isPanelMember: Boolean get() = (is_panel_member ?: 0) != 0
+}
+
+data class PanelsResponse(
+    val panels: List<Panel>,
+    val panel_discussion_enabled: Boolean,
+)
+
+/** A single question on a panel's Q&A board. */
+data class PanelQuestion(
+    val id: Int,
+    val session_id: Int,
+    val attendee_id: Int,
+    val question: String,
+    val created_at: String? = null,
+    val attendee_name: String? = null,
+    val attendee_org: String? = null,
+    val attendee_photo: String? = null,
+    val is_panel_member: Int? = null,
+) {
+    val isPanelMember: Boolean get() = (is_panel_member ?: 0) != 0
+}
+
+data class PanelQuestionsResponse(val questions: List<PanelQuestion>)
+
+data class PanelQuestionResponse(val question: PanelQuestion)
+
+data class PostPanelQuestionRequest(val question: String)
+
 // MARK: - Error
 
 data class ApiError(

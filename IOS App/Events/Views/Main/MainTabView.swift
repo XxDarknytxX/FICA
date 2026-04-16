@@ -14,8 +14,8 @@ struct MainTabView: View {
                 .tabItem { Label("Vote", systemImage: "hand.thumbsup.fill") }.tag(2)
             NetworkingView()
                 .tabItem { Label("Network", systemImage: "person.2.fill") }.tag(3)
-            AnnouncementsView()
-                .tabItem { Label("Updates", systemImage: "bell.fill") }.tag(4)
+            PanelsView()
+                .tabItem { Label("Panels", systemImage: "bubble.left.and.bubble.right.fill") }.tag(4)
         }
         .tint(.ficaNavy)
         .opacity(appeared ? 1 : 0)

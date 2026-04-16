@@ -103,6 +103,19 @@ interface ApiService {
 
     @DELETE("delegate/vote")
     suspend fun removeVote(): Response<VoteResponse>
+
+    // Panel Discussion
+    @GET("delegate/panels")
+    suspend fun getPanels(@Query("year") year: Int? = null): Response<PanelsResponse>
+
+    @GET("delegate/panels/{id}/questions")
+    suspend fun getPanelQuestions(@Path("id") id: Int): Response<PanelQuestionsResponse>
+
+    @POST("delegate/panels/{id}/questions")
+    suspend fun postPanelQuestion(
+        @Path("id") id: Int,
+        @Body request: PostPanelQuestionRequest,
+    ): Response<PanelQuestionResponse>
 }
 
 object ApiClient {

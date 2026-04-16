@@ -428,6 +428,65 @@ struct EventSettings: Decodable {
     let settings: [String: String]
 }
 
+// MARK: - Panel Discussion
+
+/// A panel session enriched with the logged-in attendee's membership flag
+/// and the live question count, returned from `/api/delegate/panels`.
+/// Hashable so it can drive `NavigationLink(value:)` + `navigationDestination`.
+struct Panel: Codable, Identifiable, Hashable {
+    let id: Int
+    let title: String
+    let description: String?
+    let session_date: String?
+    let start_time: String?
+    let end_time: String?
+    let room: String?
+    let speaker_name: String?
+    let speaker_title: String?
+    let speaker_org: String?
+    let speaker_photo: String?
+    let moderator: String?
+    let congress_year: Int?
+    let question_count: Int?
+    let is_panel_member: Int?
+
+    /// 1/0 backend flag exposed as a convenient Bool.
+    var isPanelMember: Bool { (is_panel_member ?? 0) != 0 }
+}
+
+struct PanelsResponse: Decodable {
+    let panels: [Panel]
+    let panel_discussion_enabled: Bool
+}
+
+/// A single question on a panel's Q&A board, joined with the asker's
+/// attendee info so cards render without extra lookups.
+struct PanelQuestion: Codable, Identifiable {
+    let id: Int
+    let session_id: Int
+    let attendee_id: Int
+    let question: String
+    let created_at: String?
+    let attendee_name: String?
+    let attendee_org: String?
+    let attendee_photo: String?
+    let is_panel_member: Int?
+
+    var isPanelMember: Bool { (is_panel_member ?? 0) != 0 }
+}
+
+struct PanelQuestionsResponse: Decodable {
+    let questions: [PanelQuestion]
+}
+
+struct PanelQuestionResponse: Decodable {
+    let question: PanelQuestion
+}
+
+struct PostPanelQuestionRequest: Encodable {
+    let question: String
+}
+
 // MARK: - Generic Error
 struct APIError: Decodable {
     let error: String

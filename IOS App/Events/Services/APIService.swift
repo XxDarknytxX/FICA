@@ -229,6 +229,31 @@ actor APIService {
     func removeVote() async throws {
         try await delete("/delegate/vote")
     }
+
+    // MARK: - Panel Discussion
+
+    /// Returns the panel-type sessions for the given congress year, along
+    /// with the global `panel_discussion_enabled` flag in the same envelope
+    /// so the UI can gate its composer without a second request.
+    func getPanels(year: Int? = nil) async throws -> PanelsResponse {
+        let path = year != nil ? "/delegate/panels?year=\(year!)" : "/delegate/panels"
+        return try await get(path)
+    }
+
+    func getPanelQuestions(sessionId: Int) async throws -> [PanelQuestion] {
+        let resp: PanelQuestionsResponse = try await get("/delegate/panels/\(sessionId)/questions")
+        return resp.questions
+    }
+
+    /// Posts a new question and returns the enriched row the backend
+    /// echoes back (includes asker name/org/photo + panel-member flag).
+    func postPanelQuestion(sessionId: Int, question: String) async throws -> PanelQuestion {
+        let resp: PanelQuestionResponse = try await post(
+            "/delegate/panels/\(sessionId)/questions",
+            body: PostPanelQuestionRequest(question: question)
+        )
+        return resp.question
+    }
 }
 
 // MARK: - Errors
