@@ -152,9 +152,11 @@ export default function ModeratorDashboard() {
         right={
           <button
             onClick={load}
-            className="inline-flex items-center gap-1.5 px-3 h-8 text-[12.5px] font-medium text-slate-600 hover:text-slate-900 rounded-md hover:bg-slate-100 transition-colors"
+            aria-label="Refresh"
+            className="inline-flex items-center justify-center gap-1.5 h-9 w-9 sm:w-auto sm:px-3 text-[12.5px] font-medium text-slate-600 hover:text-slate-900 rounded-md hover:bg-slate-100 transition-colors"
           >
-            <RefreshCw size={13} /> Refresh
+            <RefreshCw size={14} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         }
       />
@@ -165,23 +167,29 @@ export default function ModeratorDashboard() {
         </div>
       )}
 
-      {/* Event state hero — inline, subtle */}
-      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-medium text-slate-500 mb-1 flex items-center gap-1.5">
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${data?.voting_open ? "bg-emerald-500" : "bg-slate-300"}`} />
-            {data?.voting_open ? "Event is live" : "Event idle"}
+      {/* Event state hero — tight, readable at 360px */}
+      <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-3 sm:px-4 sm:py-3.5 mb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-medium text-slate-500 mb-1 flex items-center gap-1.5">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${data?.voting_open ? "bg-emerald-500" : "bg-slate-300"}`} />
+              {data?.voting_open ? "Event live" : "Event idle"}
+            </div>
+            <h2 className="m-0 text-[15px] sm:text-[16px] font-semibold text-slate-900 tracking-[-0.018em] leading-[1.3]">
+              {data?.voting_open ? "Voting is open" : "Voting is closed"}
+            </h2>
+            <div className="text-[12.5px] text-slate-500 mt-1 leading-[1.4]">
+              {openPanelCount} of {panels.length} panel{panels.length === 1 ? "" : "s"} taking questions
+            </div>
           </div>
-          <h2 className="m-0 text-[16px] font-semibold text-slate-900 tracking-[-0.018em] leading-[1.3]">
-            {data?.voting_open ? "Voting is open" : "Voting is closed"}
-            <span className="text-slate-400 font-normal"> · {openPanelCount} of {panels.length} panels taking questions</span>
-          </h2>
+          {pendingTotal > 0 && (
+            <div className="shrink-0">
+              <Chip tone="accent" icon={Zap}>
+                <SmoothCount value={pendingTotal} /> unread
+              </Chip>
+            </div>
+          )}
         </div>
-        {pendingTotal > 0 && (
-          <Chip tone="accent" icon={Zap}>
-            <SmoothCount value={pendingTotal} /> unread {pendingTotal === 1 ? "question" : "questions"}
-          </Chip>
-        )}
       </div>
 
       {/* Stats */}

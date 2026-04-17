@@ -7,6 +7,16 @@ import {
   Menu, X, Sliders,
 } from "lucide-react";
 import { getAuthRole } from "../services/api";
+import BottomTabBar from "./BottomTabBar";
+
+// The mobile bottom tab bar only has room for 4 icons + a More overflow,
+// so we curate a "primary" subset per role. Admins get the full sidebar
+// via the More drawer; moderators only have 4 tabs total so every one
+// fits in the bar.
+const MOBILE_PRIMARY = {
+  moderator: ["/moderator", "/announcements", "/projects", "/panels"],
+  admin: ["/dashboard", "/agenda", "/attendees", "/panels"],
+};
 
 // ─── Sidebar nav structure ───────────────────────────────────────────────
 // Each item now carries `roles` — the list of account roles that can see
@@ -102,6 +112,16 @@ export default function Layout({ children }) {
 
   const currentItem = allItems.find((i) => location.pathname.startsWith(i.to));
   const sidebarWidth = collapsed ? 64 : 232;
+
+  // Build the mobile bottom-tab list for the current role by walking
+  // the filtered sidebar sections in MOBILE_PRIMARY order. Anything
+  // outside the list shows up via "More".
+  const mobileTabs = useMemo(() => {
+    const wanted = MOBILE_PRIMARY[role] || [];
+    return wanted
+      .map((path) => allItems.find((i) => i.to === path))
+      .filter(Boolean);
+  }, [allItems, role]);
 
   return (
     <div className="app-shell" style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
@@ -260,15 +280,10 @@ export default function Layout({ children }) {
             flexShrink: 0,
           }}
         >
-          {/* Left: hamburger (mobile) + page title */}
+          {/* Left: page title. Hamburger is gone on mobile — bottom tab
+              bar + More is the primary mobile nav now. The drawer still
+              exists so admin More can open it. */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
-            <button
-              className="btn-icon hamburger"
-              onClick={() => setMobileOpen((v) => !v)}
-              aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            >
-              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-            </button>
             {currentItem?.icon && (
               <currentItem.icon size={16} color="var(--text-subtle)" />
             )}
@@ -424,9 +439,21 @@ export default function Layout({ children }) {
 
         {/* Page content */}
         <main style={{ flex: 1, overflowY: "auto", background: "var(--bg)" }}>
-          <div style={{ padding: "24px", maxWidth: 1400, margin: "0 auto" }}>{children}</div>
+          <div
+            className="px-4 py-4 sm:px-6 sm:py-5 lg:px-6 lg:py-6 pb-[96px] lg:pb-6"
+            style={{ maxWidth: 1400, margin: "0 auto" }}
+          >
+            {children}
+          </div>
         </main>
       </div>
+
+      {/* Mobile bottom tab bar — hidden on desktop. */}
+      <BottomTabBar
+        tabs={mobileTabs}
+        role={role}
+        onMore={() => setMobileOpen(true)}
+      />
     </div>
   );
 }
