@@ -101,5 +101,25 @@ object AuthManager {
         token = null
         currentUser = null
         ApiClient.updateToken(null)
+        // Notify any UI layer that wants to route away from authenticated
+        // screens (e.g. the root NavHost popping back to Login). Silent-fail
+        // if a listener itself throws — we don't want to leave the app in a
+        // half-logged-out state.
+        listeners.forEach { runCatching { it() } }
+    }
+
+    // ─── Logout listener API ─────────────────────────────────────────
+    //
+    // Background triggers like a WebSocket 401 on upgrade (server rotated
+    // JWT_SECRET, or the token was otherwise invalidated) call
+    // AuthManager.logout() from a non-UI thread. The root NavHost
+    // registers here so it can react by navigating back to Login
+    // without waiting for the user to tap anything.
+
+    private val listeners = mutableListOf<() -> Unit>()
+
+    fun addLogoutListener(listener: () -> Unit): () -> Unit {
+        listeners.add(listener)
+        return { listeners.remove(listener) }
     }
 }

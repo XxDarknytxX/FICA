@@ -120,6 +120,19 @@ fun FICANavHost() {
         Screen.Splash.route
     }
 
+    // React to background logouts (e.g. WebSocket 401 because the token
+    // was invalidated by a server-side secret rotation). Without this, a
+    // stale-token state would just loop forever on the WS and the app
+    // would look frozen to the user.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val remove = AuthManager.addLogoutListener {
+            rootNavController.navigate(Screen.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+        onDispose { remove() }
+    }
+
     NavHost(
         navController = rootNavController,
         startDestination = startDestination,

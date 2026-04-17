@@ -64,10 +64,17 @@ object ChatWebSocket {
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 webSocket = null
-                // Reconnect after 3 seconds using the cached token. If the
-                // token has expired the server will reject the upgrade
-                // and the next attempt will fail — the user must log in
-                // again to refresh it.
+                // 401 on the upgrade = the token is stale (server rotated
+                // JWT_SECRET, or the token expired). Boot to login rather
+                // than looping forever — that's what made the app look
+                // frozen after a backend deploy. AuthManager.logout()
+                // notifies the root NavHost via the logout-listener API,
+                // which pops back to Login.
+                if (response?.code == 401) {
+                    com.fica.events.data.auth.AuthManager.logout()
+                    return
+                }
+                // Transient network failure — retry after 3s.
                 Thread.sleep(3000)
                 val uid = ChatWebSocket.userId
                 val tkn = ChatWebSocket.authToken

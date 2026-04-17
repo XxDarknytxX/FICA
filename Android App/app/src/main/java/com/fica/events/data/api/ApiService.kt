@@ -138,9 +138,31 @@ object ApiClient {
         chain.proceed(requestBuilder.build())
     }
 
+    // Auto-logout interceptor — if the backend returns 401 on an
+    // authenticated request, the token is stale (most commonly: server
+    // rotated JWT_SECRET while the app was logged in). Clear the session
+    // and let the NavHost route back to login. Without this, every API
+    // call silently fails and the app looks frozen.
+    //
+    // We only logout when the request actually carried a Bearer header —
+    // otherwise a 401 from /login with wrong credentials would accidentally
+    // wipe someone else's session.
+    private val unauthorisedInterceptor = Interceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (response.code == 401 && chain.request().header("Authorization") != null) {
+            // Fire AuthManager.logout() on the main thread so listeners
+            // (e.g. NavHost.navigate(Login)) run safely.
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                runCatching { com.fica.events.data.auth.AuthManager.logout() }
+            }
+        }
+        response
+    }
+
     private val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(unauthorisedInterceptor)
             .build()
     }
 

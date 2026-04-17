@@ -125,12 +125,23 @@ final class ChatWebSocket {
                 // Keep listening
                 self?.listen()
             case .failure:
+                // Detect 401 on the upgrade — that means the token is
+                // either missing or invalidated by a server-side secret
+                // rotation. Boot the user to login instead of looping
+                // forever, which is what used to make the app look frozen
+                // after a deploy.
+                let wasUnauthorized = (self?.task?.response as? HTTPURLResponse)?.statusCode == 401
                 Task { @MainActor in
                     self?.isConnected = false
-                    // Reconnect after 3 seconds using the cached token. If
-                    // the token has expired the server will 401 on upgrade
-                    // and the next receive() will fail — loop will back off
-                    // until the user next logs in.
+                    if wasUnauthorized {
+                        // Full logout — clears the stale token and sends
+                        // the user back to the login screen. The next time
+                        // they log in, the fresh JWT will open a working
+                        // WS connection.
+                        AuthService.shared.logout()
+                        return
+                    }
+                    // Transient failure — retry after 3s.
                     try? await Task.sleep(for: .seconds(3))
                     if let uid = self?.userId, let tkn = self?.token {
                         self?.connect(userId: uid, token: tkn)
