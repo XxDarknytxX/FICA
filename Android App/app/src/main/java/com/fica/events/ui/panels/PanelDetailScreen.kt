@@ -264,8 +264,8 @@ private fun CompactHero(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .padding(top = 12.dp, bottom = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(top = 10.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // Eyebrow: SESSION pill · time · room · status (right)
         Row(
@@ -323,7 +323,7 @@ private fun CompactHero(
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = FICAText,
-            lineHeight = 25.sp,
+            lineHeight = 24.sp,
         )
 
         // Speaker + moderator on one row — each is a little avatar/initial
@@ -404,17 +404,16 @@ private fun PersonInline(label: String, name: String, sub: String?, photo: Strin
             AvatarView(
                 name = name,
                 photoUrl = photo,
-                size = 28.dp,
+                size = 30.dp,
                 borderColor = FICABorder,
                 borderWidth = 1.dp,
             )
         } else {
-            // Moderator usually comes in as a plain name string — show an
-            // icon chip instead of an auto-initials avatar so there's no
-            // visual collision with the speaker photo.
+            // Moderator usually arrives as a plain string — use a mic icon
+            // chip so it doesn't collide visually with the speaker photo.
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(FICAInputBg),
                 contentAlignment = Alignment.Center,
@@ -423,31 +422,48 @@ private fun PersonInline(label: String, name: String, sub: String?, photo: Strin
                     imageVector = Icons.Filled.Mic,
                     contentDescription = null,
                     tint = FICAMuted,
-                    modifier = Modifier.size(13.dp),
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }
-        Column {
-            Text(
-                text = label.uppercase(),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = FICAMuted,
-                letterSpacing = 0.6.sp,
-            )
-            Text(
-                text = name,
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = FICAText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        // Two tightly-stacked lines — label inline with name (light
+        // weight, small), and sub directly below with a 13sp line height
+        // so there's no stray gap from font metrics.
+        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = FICAMuted,
+                    letterSpacing = 0.4.sp,
+                    lineHeight = 11.sp,
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 2.dp, height = 2.dp)
+                        .clip(CircleShape)
+                        .background(FICABorder),
+                )
+                Text(
+                    text = name,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = FICAText,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (!sub.isNullOrBlank()) {
                 Text(
                     text = sub,
                     fontSize = 10.5.sp,
                     color = FICAMuted,
+                    lineHeight = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -516,12 +532,23 @@ private fun EmptyQuestions(open: Boolean) {
     }
 }
 
-/** Chat-style bubble. Name row + message card, tight. */
+/** Chat-style bubble. Header line (name · org, timestamp right) + message card. */
 @Composable
 private fun QuestionBubble(question: PanelQuestion, accent: Color) {
     val isPanelist = question.isPanelMember
     val bubbleBg = if (isPanelist) accent.copy(alpha = 0.08f) else FICACard
     val bubbleBorder = if (isPanelist) accent.copy(alpha = 0.25f) else FICABorder.copy(alpha = 0.4f)
+
+    // Build a single inline "Alice Smith · KPMG Fiji" header instead of
+    // stacking name + org on two rows — that old layout left a gap that
+    // looked loose on small screens.
+    val headerLine = buildString {
+        append(question.attendee_name ?: "Attendee")
+        if (!question.attendee_org.isNullOrBlank()) {
+            append(" · ")
+            append(question.attendee_org)
+        }
+    }
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -530,26 +557,27 @@ private fun QuestionBubble(question: PanelQuestion, accent: Color) {
         AvatarView(
             name = question.attendee_name ?: "?",
             photoUrl = question.attendee_photo,
-            size = 34.dp,
+            size = 32.dp,
             borderColor = FICABorder,
             borderWidth = 1.dp,
         )
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    text = question.attendee_name ?: "Attendee",
+                    text = headerLine,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = FICAText,
+                    lineHeight = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = true),
                 )
                 if (isPanelist) {
                     Box(
@@ -564,37 +592,28 @@ private fun QuestionBubble(question: PanelQuestion, accent: Color) {
                             fontWeight = FontWeight.Bold,
                             color = accent,
                             letterSpacing = 0.4.sp,
+                            lineHeight = 10.sp,
                         )
                     }
                 }
-                Spacer(modifier = Modifier.weight(1f))
                 question.created_at?.let { d ->
                     Text(
                         text = relativeTime(d),
                         fontSize = 10.sp,
                         color = FICAMuted,
+                        lineHeight = 12.sp,
                     )
                 }
             }
 
-            if (!question.attendee_org.isNullOrBlank()) {
-                Text(
-                    text = question.attendee_org,
-                    fontSize = 10.sp,
-                    color = FICAMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            // Message bubble
+            // Message bubble — no padding(top) above; the 6dp column
+            // spacing handles the gap so we don't stack margins.
             Box(
                 modifier = Modifier
-                    .padding(top = 2.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(bubbleBg)
                     .border(0.5.dp, bubbleBorder, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
             ) {
                 Text(
                     text = question.question,
