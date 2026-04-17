@@ -80,6 +80,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -757,10 +758,16 @@ private fun panelAccentColor(panel: Panel): Color =
 private fun relativeTime(isoString: String?): String {
     if (isoString.isNullOrBlank()) return ""
     return try {
+        // Server sends UTC timestamps ending in Z (e.g. "2026-04-17T22:30:00Z").
+        // The 'Z' in the pattern is a quoted literal — not a timezone marker —
+        // so we explicitly set the parser's timezone to UTC. Without this, on
+        // a Fiji (UTC+12) phone, parsed instants were 12h off, which cascaded
+        // into the relative-time text ("13h ago" for a question posted 1h ago).
+        val utc = TimeZone.getTimeZone("UTC")
         val formats = listOf(
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US),
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US),
-            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US),
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = utc },
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = utc },
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply { timeZone = utc },
         )
         var date: Date? = null
         for (fmt in formats) {
@@ -776,6 +783,8 @@ private fun relativeTime(isoString: String?): String {
             mins < 60 -> "${mins}m ago"
             hours < 24 -> "${hours}h ago"
             days < 7 -> "${days}d ago"
+            // "d MMM" formatter intentionally uses the device's local zone so
+            // the user sees the date the way they'd expect in their timezone.
             else -> SimpleDateFormat("d MMM", Locale.US).format(date)
         }
     } catch (_: Exception) { "" }

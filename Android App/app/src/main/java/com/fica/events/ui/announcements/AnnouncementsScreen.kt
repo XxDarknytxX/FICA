@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 // ── Relative time helper ─────────────────────────────────────────────────────
@@ -68,10 +69,15 @@ import java.util.concurrent.TimeUnit
 private fun relativeTime(isoString: String?): String {
     if (isoString.isNullOrBlank()) return ""
     return try {
+        // Server timestamps are UTC. The 'Z' in the pattern is a quoted
+        // literal, so SimpleDateFormat would otherwise interpret the digits
+        // in the device's local zone — on a Fiji (UTC+12) phone that made
+        // "just now" render as "12h ago". Force UTC.
+        val utc = TimeZone.getTimeZone("UTC")
         val formats = listOf(
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US),
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US),
-            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US),
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = utc },
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = utc },
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply { timeZone = utc },
         )
         var date: Date? = null
         for (fmt in formats) {
@@ -91,6 +97,8 @@ private fun relativeTime(isoString: String?): String {
             mins < 60 -> "${mins}m ago"
             hours < 24 -> "${hours}h ago"
             days < 7 -> "${days}d ago"
+            // Default formatter uses device local zone — that's what users
+            // want to see for an absolute date.
             else -> SimpleDateFormat("d MMM", Locale.US).format(date)
         }
     } catch (_: Exception) {
