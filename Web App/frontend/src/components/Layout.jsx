@@ -249,10 +249,10 @@ export default function Layout({ children }) {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Sticky top header */}
         <header
+          className="px-4 sm:px-6"
           style={{
             background: "var(--surface)",
             borderBottom: "1px solid var(--border)",
-            padding: "0 24px",
             height: 56,
             display: "flex",
             alignItems: "center",
@@ -261,7 +261,7 @@ export default function Layout({ children }) {
           }}
         >
           {/* Left: hamburger (mobile) + page title */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
             <button
               className="btn-icon hamburger"
               onClick={() => setMobileOpen((v) => !v)}
@@ -272,17 +272,17 @@ export default function Layout({ children }) {
             {currentItem?.icon && (
               <currentItem.icon size={16} color="var(--text-subtle)" />
             )}
-            <div className="crumb-current">
+            <div className="crumb-current truncate">
               {currentItem?.label ?? "FICA Admin"}
             </div>
           </div>
 
-          {/* Right: search, notif, profile */}
+          {/* Right: search + notif desktop-only, profile always visible */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button className="btn-icon" aria-label="Search">
+            <button className="btn-icon hidden sm:inline-flex" aria-label="Search">
               <Search size={17} />
             </button>
-            <button className="btn-icon" aria-label="Notifications" style={{ position: "relative" }}>
+            <button className="btn-icon hidden sm:inline-flex" aria-label="Notifications" style={{ position: "relative" }}>
               <BellIcon size={17} />
               <span
                 style={{
@@ -297,7 +297,7 @@ export default function Layout({ children }) {
                 }}
               />
             </button>
-            <div style={{ width: 1, height: 22, background: "var(--border)", margin: "0 6px" }} />
+            <div className="hidden sm:block" style={{ width: 1, height: 22, background: "var(--border)", margin: "0 6px" }} />
 
             {/* Profile button + dropdown */}
             <div ref={profileRef} style={{ position: "relative" }}>
