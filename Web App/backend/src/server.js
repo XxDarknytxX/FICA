@@ -95,24 +95,44 @@ const wss = new WebSocketServer({ noServer: true });
 // Map userId → Set of connected WebSocket clients
 const userSockets = new Map();
 
+// Count the total live sockets right now — used by the broadcast helpers
+// below to log "we tried to push X but only Y clients were connected".
+function liveSocketCount() {
+  let n = 0;
+  for (const s of userSockets.values()) for (const ws of s) if (ws.readyState === 1) n++;
+  return n;
+}
+
 function broadcastToUser(userId, event, data) {
   const sockets = userSockets.get(userId);
-  if (!sockets) return;
-  const payload = JSON.stringify({ event, data });
-  for (const ws of sockets) {
-    if (ws.readyState === 1) ws.send(payload);
+  if (!sockets) {
+    console.log(`WS broadcast → user ${userId} ${event}: 0 sockets (user not connected)`);
+    return;
   }
+  const payload = JSON.stringify({ event, data });
+  let sent = 0;
+  for (const ws of sockets) {
+    if (ws.readyState === 1) { ws.send(payload); sent++; }
+  }
+  console.log(`WS broadcast → user ${userId} ${event}: ${sent} socket(s)`);
 }
 
 // Fan-out to every connected socket. Used for events that concern every
 // delegate — e.g. admin toggling a panel's discussion open/closed.
 function broadcastAll(event, data) {
   const payload = JSON.stringify({ event, data });
+  let sent = 0;
   for (const sockets of userSockets.values()) {
     for (const ws of sockets) {
-      if (ws.readyState === 1) ws.send(payload);
+      if (ws.readyState === 1) { ws.send(payload); sent++; }
     }
   }
+  // If this prints "0 recipients" the problem is on the receiver side —
+  // either no clients are currently connected, or they 401'd on upgrade
+  // (likely: stale JWT from the secret rotation, or a pre-`?token=`
+  // mobile build). Log the user IDs so you can see who's actually live.
+  const liveUsers = Array.from(userSockets.keys()).join(",") || "none";
+  console.log(`WS broadcast ${event}: ${sent} recipients (live users: ${liveUsers})`);
 }
 
 // Authenticate the upgrade request before handing it to wss. We extract the
@@ -130,6 +150,7 @@ httpServer.on("upgrade", (req, socket, head) => {
 
   const token = url.searchParams.get("token");
   if (!token) {
+    console.log("WS upgrade 401: no token on URL (old client build?)");
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
@@ -138,7 +159,11 @@ httpServer.on("upgrade", (req, socket, head) => {
   let decoded;
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch {
+  } catch (e) {
+    // Most common cause after a deploy: JWT_SECRET was rotated, so every
+    // token issued before the rotation is now invalid. The client needs
+    // to log out + log back in.
+    console.log(`WS upgrade 401: ${e?.message || "invalid token"}`);
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
@@ -146,6 +171,7 @@ httpServer.on("upgrade", (req, socket, head) => {
 
   const userId = Number(decoded?.id);
   if (!userId) {
+    console.log("WS upgrade 401: token missing id claim");
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
