@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -26,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -83,11 +83,16 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * Q&A board for a single panel. Ports the iOS PanelDetailView redesign —
- * full-width hero (not a card) carries the panel identity, and the
- * question list below is a chat-bubble feed rather than another stack of
- * cards. Composer is pinned to the bottom and self-gates on the per-panel
- * + response-level `discussion_enabled` flag.
+ * Q&A board for a single panel.
+ *
+ * Redesigned for density + modern feel:
+ *   - Compact 3-line hero: eyebrow row (SESSION · time · room · status),
+ *     title, speaker/moderator merged into one line. No wall of stacked
+ *     sections.
+ *   - Description collapsed below the hero as a tight paragraph.
+ *   - Chat bubbles for the question feed; no extra card around each.
+ *   - Composer pinned with `navigationBarsPadding()` so the input and
+ *     submit button stay above the system gesture area.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,7 +114,6 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
             val body = resp.body() ?: return
             val found = body.panels.firstOrNull { it.id == panelId }
             panel = found
-            // Per-panel flag AND response-level — either closes the composer.
             discussionEnabled = (found?.isDiscussionEnabled ?: true) && body.panel_discussion_enabled
         } catch (_: Exception) {}
     }
@@ -128,7 +132,6 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
         isLoadingQuestions = false
     }
 
-    // Live updates — admin toggling this panel's discussion flows in.
     DisposableEffect(panelId) {
         val token = ChatWebSocket.addPanelDiscussionHandler { sessionId, enabled ->
             if (sessionId == panelId) {
@@ -178,23 +181,12 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
     ) {
         CenterAlignedTopAppBar(
             title = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "DISCUSSION",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = FICAMuted,
-                        letterSpacing = 0.6.sp,
-                    )
-                    Text(
-                        text = panel?.title ?: "Panel",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = FICAText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    text = "Panel Discussion",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = FICAText,
+                )
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
@@ -211,11 +203,11 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
         Box(modifier = Modifier.weight(1f)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 12.dp),
+                contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
             ) {
                 panel?.let { p ->
                     item(key = "hero") {
-                        PanelHero(
+                        CompactHero(
                             panel = p,
                             accent = accent,
                             group = group,
@@ -223,20 +215,21 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
                         )
                     }
                 }
-                item(key = "q-header") {
-                    QuestionsSectionHeader(count = questions.size)
-                }
+                item(key = "q-header") { QuestionsHeader(count = questions.size) }
+
                 when {
                     isLoadingQuestions && questions.isEmpty() -> item(key = "loading") {
-                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
-                            LoadingView(message = "Loading questions...")
-                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                        ) { LoadingView(message = "Loading questions...") }
                     }
                     questions.isEmpty() -> item(key = "empty") {
                         EmptyQuestions(open = discussionEnabled)
                     }
                     else -> items(questions, key = { it.id }) { q ->
-                        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 7.dp)) {
+                        Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                             QuestionBubble(question = q, accent = accent)
                         }
                     }
@@ -244,7 +237,6 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
             }
         }
 
-        // Top hairline over the composer.
         HorizontalDivider(color = FICABorder.copy(alpha = 0.4f), thickness = 0.5.dp)
         Composer(
             draft = draft,
@@ -259,10 +251,10 @@ fun PanelDetailScreen(panelId: Int, onBack: () -> Unit) {
     }
 }
 
-// ─── Hero ──────────────────────────────────────────────────────────────
+// ─── Hero — compact 3-row identity block ───────────────────────────────
 
 @Composable
-private fun PanelHero(
+private fun CompactHero(
     panel: Panel,
     accent: Color,
     group: SessionGroup?,
@@ -271,29 +263,40 @@ private fun PanelHero(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(FICABg)
             .padding(horizontal = 20.dp)
-            .padding(top = 16.dp, bottom = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(top = 12.dp, bottom = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // Accent stripe + group label + status chip
+        // Eyebrow: SESSION pill · time · room · status (right)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Box(
                 modifier = Modifier
-                    .width(20.dp)
-                    .height(3.dp)
-                    .background(accent),
-            )
-            Text(
-                text = (group?.label ?: "Panel Discussion").uppercase(),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = accent,
-                letterSpacing = 0.6.sp,
-            )
+                    .clip(RoundedCornerShape(50))
+                    .background(accent.copy(alpha = 0.12f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    text = (group?.label ?: "Panel").uppercase(),
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = accent,
+                    letterSpacing = 0.6.sp,
+                )
+            }
+            if (!panel.start_time.isNullOrBlank() && !panel.end_time.isNullOrBlank()) {
+                MetaDot()
+                MetaIconText(
+                    icon = Icons.Filled.Schedule,
+                    text = "${panel.start_time} – ${panel.end_time}",
+                )
+            }
+            if (!panel.room.isNullOrBlank()) {
+                MetaDot()
+                MetaIconText(icon = Icons.Filled.LocationOn, text = panel.room)
+            }
             Spacer(modifier = Modifier.weight(1f))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -306,7 +309,7 @@ private fun PanelHero(
                         .background(if (discussionEnabled) FICASuccess else FICADanger),
                 )
                 Text(
-                    text = if (discussionEnabled) "Open for questions" else "Closed",
+                    text = if (discussionEnabled) "Open" else "Closed",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (discussionEnabled) FICASuccess else FICADanger,
@@ -317,118 +320,60 @@ private fun PanelHero(
         // Title
         Text(
             text = panel.title,
-            fontSize = 22.sp,
+            fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = FICAText,
-            lineHeight = 27.sp,
+            lineHeight = 25.sp,
         )
 
-        // Meta row — time + room
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (!panel.start_time.isNullOrBlank() && !panel.end_time.isNullOrBlank()) {
-                IconText(
-                    icon = Icons.Filled.Schedule,
-                    text = "${panel.start_time} – ${panel.end_time}",
-                    color = FICASecondary,
-                    size = 12,
-                )
-            }
-            if (!panel.room.isNullOrBlank()) {
-                IconText(
-                    icon = Icons.Filled.LocationOn,
-                    text = panel.room,
-                    color = FICASecondary,
-                    size = 12,
-                )
-            }
-        }
-
-        // Speaker + moderator row
+        // Speaker + moderator on one row — each is a little avatar/initial
+        // pair, both collapse gracefully if missing.
         if (!panel.speaker_name.isNullOrBlank() || !panel.moderator.isNullOrBlank()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 if (!panel.speaker_name.isNullOrBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        AvatarView(
-                            name = panel.speaker_name,
-                            photoUrl = panel.speaker_photo,
-                            size = 36.dp,
-                            borderColor = FICABorder,
-                            borderWidth = 1.dp,
-                        )
-                        Column {
-                            Text(
-                                text = panel.speaker_name,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = FICAText,
-                            )
-                            val role = panel.speaker_title ?: panel.speaker_org
-                            if (!role.isNullOrBlank()) {
-                                Text(
-                                    text = role,
-                                    fontSize = 11.sp,
-                                    color = FICAMuted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
+                    PersonInline(
+                        label = "Speaker",
+                        name = panel.speaker_name,
+                        sub = panel.speaker_title ?: panel.speaker_org,
+                        photo = panel.speaker_photo,
+                    )
                 }
                 if (!panel.moderator.isNullOrBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(28.dp)
-                            .background(FICABorder),
+                    PersonInline(
+                        label = "Moderator",
+                        name = panel.moderator,
+                        sub = null,
+                        photo = null,
                     )
-                    Column {
-                        Text(
-                            text = "MODERATOR",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = FICAMuted,
-                            letterSpacing = 0.6.sp,
-                        )
-                        Text(
-                            text = panel.moderator,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = FICASecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
         }
 
-        // Description
+        // Description — kept tight so it doesn't dominate the hero.
         if (!panel.description.isNullOrBlank()) {
             Text(
                 text = panel.description,
                 fontSize = 13.sp,
                 color = FICASecondary,
                 lineHeight = 19.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
-        // Panel-member callout
+        // Panelist callout — only shows for attendees on the panel, tight band.
         if (panel.isPanelMember) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
                     .background(FICAGold.copy(alpha = 0.1f))
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Star,
@@ -437,7 +382,7 @@ private fun PanelHero(
                     modifier = Modifier.size(11.dp),
                 )
                 Text(
-                    text = "You're on this panel — audience questions appear below.",
+                    text = "You're on this panel — audience questions below.",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = FICAGold,
@@ -446,34 +391,98 @@ private fun PanelHero(
         }
     }
 
-    // Bottom hairline to separate hero from feed
     HorizontalDivider(color = FICABorder.copy(alpha = 0.4f), thickness = 0.5.dp)
+}
+
+@Composable
+private fun PersonInline(label: String, name: String, sub: String?, photo: String?) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (photo != null || label == "Speaker") {
+            AvatarView(
+                name = name,
+                photoUrl = photo,
+                size = 28.dp,
+                borderColor = FICABorder,
+                borderWidth = 1.dp,
+            )
+        } else {
+            // Moderator usually comes in as a plain name string — show an
+            // icon chip instead of an auto-initials avatar so there's no
+            // visual collision with the speaker photo.
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(FICAInputBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Mic,
+                    contentDescription = null,
+                    tint = FICAMuted,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+        }
+        Column {
+            Text(
+                text = label.uppercase(),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = FICAMuted,
+                letterSpacing = 0.6.sp,
+            )
+            Text(
+                text = name,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = FICAText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!sub.isNullOrBlank()) {
+                Text(
+                    text = sub,
+                    fontSize = 10.5.sp,
+                    color = FICAMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
 }
 
 // ─── Questions list ────────────────────────────────────────────────────
 
 @Composable
-private fun QuestionsSectionHeader(count: Int) {
+private fun QuestionsHeader(count: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .padding(top = 14.dp, bottom = 10.dp),
+            .padding(top = 14.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(
-            imageVector = Icons.Filled.ChatBubbleOutline,
-            contentDescription = null,
-            tint = FICAMuted,
-            modifier = Modifier.size(11.dp),
+        Text(
+            text = "Questions",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = FICAText,
         )
         Text(
-            text = "QUESTIONS · $count",
+            text = "$count",
             fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
             color = FICAMuted,
-            letterSpacing = 0.6.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(FICAInputBg)
+                .padding(horizontal = 7.dp, vertical = 2.dp),
         )
     }
 }
@@ -483,35 +492,31 @@ private fun EmptyQuestions(open: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 40.dp, horizontal = 16.dp),
+            .padding(vertical = 36.dp, horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(
             imageVector = Icons.Filled.ChatBubbleOutline,
             contentDescription = null,
             tint = FICABorder,
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(32.dp),
         )
         Text(
             text = "No questions yet",
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             color = FICASecondary,
         )
         Text(
-            text = if (open) "Be the first to ask." else "This panel is closed for new questions.",
-            fontSize = 12.sp,
+            text = if (open) "Be the first to ask." else "The panel is closed for new questions.",
+            fontSize = 11.5.sp,
             color = FICAMuted,
         )
     }
 }
 
-/**
- * Chat-style bubble. Avatar + name + timestamp form the header; the
- * message sits in a tinted, rounded card below. Panel-member questions
- * get the accent color tint so panelists can scan who's who.
- */
+/** Chat-style bubble. Name row + message card, tight. */
 @Composable
 private fun QuestionBubble(question: PanelQuestion, accent: Color) {
     val isPanelist = question.isPanelMember
@@ -525,35 +530,37 @@ private fun QuestionBubble(question: PanelQuestion, accent: Color) {
         AvatarView(
             name = question.attendee_name ?: "?",
             photoUrl = question.attendee_photo,
-            size = 36.dp,
+            size = 34.dp,
             borderColor = FICABorder,
             borderWidth = 1.dp,
         )
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Name + Panelist pill + timestamp
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = question.attendee_name ?: "Attendee",
-                    fontSize = 13.sp,
+                    fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = FICAText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (isPanelist) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .background(accent.copy(alpha = 0.15f))
-                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
                     ) {
                         Text(
                             text = "Panelist",
-                            fontSize = 9.sp,
+                            fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = accent,
                             letterSpacing = 0.4.sp,
@@ -565,7 +572,6 @@ private fun QuestionBubble(question: PanelQuestion, accent: Color) {
                     Text(
                         text = relativeTime(d),
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
                         color = FICAMuted,
                     )
                 }
@@ -585,16 +591,16 @@ private fun QuestionBubble(question: PanelQuestion, accent: Color) {
             Box(
                 modifier = Modifier
                     .padding(top = 2.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(bubbleBg)
-                    .border(0.5.dp, bubbleBorder, RoundedCornerShape(14.dp))
+                    .border(0.5.dp, bubbleBorder, RoundedCornerShape(12.dp))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 Text(
                     text = question.question,
-                    fontSize = 14.sp,
+                    fontSize = 13.5.sp,
                     color = FICAText,
-                    lineHeight = 20.sp,
+                    lineHeight = 19.sp,
                 )
             }
         }
@@ -633,7 +639,9 @@ private fun Composer(
             )
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -643,7 +651,8 @@ private fun Composer(
                 enabled = enabled && !isPosting,
                 placeholder = {
                     Text(
-                        text = if (enabled) "Ask the panel..." else "This panel is closed for new questions",
+                        text = if (enabled) "Ask the panel..."
+                               else "Discussion is currently closed",
                         fontSize = 14.sp,
                         color = FICAMuted.copy(alpha = 0.7f),
                     )
@@ -651,7 +660,6 @@ private fun Composer(
                 shape = RoundedCornerShape(18.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
                 colors = OutlinedTextFieldDefaults.colors(
-                    // Focus picks up the panel's session-group accent, matching iOS.
                     focusedBorderColor = accent,
                     unfocusedBorderColor = Color.Transparent,
                     focusedContainerColor = FICAInputBg,
@@ -674,7 +682,7 @@ private fun Composer(
                     CircularProgressIndicator(
                         color = Color.White,
                         strokeWidth = 2.dp,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(16.dp),
                     )
                 } else {
                     Icon(
@@ -692,27 +700,36 @@ private fun Composer(
 // ─── Helpers ──────────────────────────────────────────────────────────
 
 @Composable
-private fun IconText(
+private fun MetaIconText(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
-    color: Color,
-    size: Int = 12,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(size.dp),
+            tint = FICAMuted,
+            modifier = Modifier.size(11.dp),
         )
-        Text(text = text, fontSize = size.sp, fontWeight = FontWeight.Medium, color = color)
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = FICAMuted,
+            maxLines = 1,
+        )
     }
 }
 
-/** Same accent-color mapping as PanelsScreen so the hero matches the list card. */
+@Composable
+private fun MetaDot() {
+    Text(text = "·", fontSize = 11.sp, color = FICABorder)
+}
+
+/** Same accent color as PanelsScreen so list + hero stay visually linked. */
 private fun panelAccentColor(panel: Panel): Color =
     panelSessionGroup(panel)?.color ?: FICANavy
 
