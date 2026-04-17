@@ -452,19 +452,10 @@ select.input {
 }
 .animate-count-bump { animation: count-bump 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-/* Sidebar mobile drawer — the parts that need JS-driven class toggling.
-   Everything else (backdrop, hamburger visibility) is done in the JSX
-   with Tailwind utilities + the md: breakpoint. */
-@media (max-width: 960px) {
-  .sidebar {
-    position: fixed;
-    top: 0; left: 0; bottom: 0;
-    width: 260px !important;
-    transform: translateX(-110%);
-    transition: transform 0.22s ease;
-    z-index: 1000;
-    box-shadow: 0 10px 24px -4px rgb(15 23 42 / 0.2);
-  }
-  .sidebar.mobile-open { transform: translateX(0); }
+/* Sidebar is desktop-only — mobile uses the floating bottom tab bar +
+   MoreSheet overlay. The off-canvas-drawer pattern from earlier has been
+   retired because it felt like a desktop idiom shoehorned onto phones. */
+@media (max-width: 1023px) {
+  .sidebar { display: none !important; }
 }
 

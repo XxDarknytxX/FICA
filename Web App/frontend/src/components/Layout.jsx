@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { getAuthRole } from "../services/api";
 import BottomTabBar from "./BottomTabBar";
+import MoreSheet from "./MoreSheet";
 
 // The mobile bottom tab bar only has room for 4 icons + a More overflow,
 // so we curate a "primary" subset per role. Admins get the full sidebar
@@ -125,17 +126,9 @@ export default function Layout({ children }) {
 
   return (
     <div className="app-shell" style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)" }}>
-      {/* ─── Mobile drawer backdrop ───────────────────────────────────── */}
-      {mobileOpen && (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setMobileOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-      {/* ─── Sidebar ──────────────────────────────────────────────────── */}
+      {/* ─── Sidebar — desktop only (hidden < lg by CSS) ─────────────── */}
       <aside
-        className={`sidebar${mobileOpen ? " mobile-open" : ""}`}
+        className="sidebar"
         style={{
           width: sidebarWidth,
           flexShrink: 0,
@@ -448,11 +441,21 @@ export default function Layout({ children }) {
         </main>
       </div>
 
-      {/* Mobile bottom tab bar — hidden on desktop. */}
+      {/* Mobile floating pill tab bar — hidden on desktop. */}
       <BottomTabBar
         tabs={mobileTabs}
         role={role}
         onMore={() => setMobileOpen(true)}
+      />
+
+      {/* MoreSheet — slide-up bottom sheet for admin overflow. Sections
+          carry the full filtered nav so admins can reach every tab. */}
+      <MoreSheet
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        sections={sections}
+        onLogout={logout}
+        role={role}
       />
     </div>
   );

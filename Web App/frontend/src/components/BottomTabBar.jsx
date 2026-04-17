@@ -1,82 +1,139 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { useRef, useLayoutEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { MoreHorizontal } from "lucide-react";
 
 /**
- * Mobile-only bottom tab bar — like the floating pill on Android/iOS.
+ * Floating glass-pill bottom nav — modelled on the Android app's
+ * FloatingGlassTabBar. A rounded-full white pill sits above the system
+ * nav bar with a sliding gold indicator that animates across as the
+ * user taps between tabs.
  *
- * Appears at every viewport < `lg` (1024px). Hidden on desktop where the
- * sidebar provides navigation. Tabs are role-aware (passed in from the
- * parent); admins get a trailing "More" button that opens the drawer
- * for the tabs that don't fit.
+ * Only rendered under `lg` (1024px) — desktop uses the sidebar.
  */
 export default function BottomTabBar({ tabs, onMore, role }) {
   const location = useLocation();
-  if (!tabs?.length) return null;
+  const navigate = useNavigate();
+  const containerRef = useRef(null);
+  const itemRefs = useRef([]);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, visible: false });
+
+  // All renderable tabs (primary + optional More button).
+  const items = [
+    ...(tabs || []).map((t) => ({ kind: "tab", ...t })),
+    ...(role === "admin" && onMore
+      ? [{ kind: "more", icon: MoreHorizontal, label: "More", onClick: onMore, to: null }]
+      : []),
+  ];
+
+  // Position the sliding indicator behind whichever tab matches the
+  // current route. Re-runs on every pathname change and on window
+  // resize so the indicator stays put through rotation / dev-tools.
+  useLayoutEffect(() => {
+    const activeIdx = items.findIndex((it) => it.kind === "tab" && isActive(location.pathname, it.to));
+    if (activeIdx < 0) {
+      setIndicator((p) => ({ ...p, visible: false }));
+      return;
+    }
+    const el = itemRefs.current[activeIdx];
+    const container = containerRef.current;
+    if (!el || !container) return;
+    const elBox = el.getBoundingClientRect();
+    const contBox = container.getBoundingClientRect();
+    setIndicator({
+      left: elBox.left - contBox.left,
+      width: elBox.width,
+      visible: true,
+    });
+  }, [location.pathname, items.length]);
+
+  if (!items.length) return null;
 
   return (
-    <nav
-      aria-label="Mobile navigation"
-      className="
-        lg:hidden fixed bottom-0 left-0 right-0 z-40
-        bg-white/95 backdrop-blur-md border-t border-slate-200
-      "
-      style={{
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
+    <div
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 pointer-events-none"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <div className="flex items-stretch justify-around px-1 pt-1.5 pb-1 max-w-[640px] mx-auto">
-        {tabs.map((tab) => {
-          const active = isActive(location.pathname, tab.to);
-          const Icon = tab.icon;
-          return (
-            <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
-              className={`
-                flex flex-col items-center justify-center gap-1 flex-1 min-w-0 py-1.5 px-1 rounded-lg
-                transition-colors select-none
-                ${active ? "text-[#0F2D5E]" : "text-slate-400 hover:text-slate-600 active:text-slate-700"}
-              `}
-            >
-              <Icon size={20} strokeWidth={active ? 2.4 : 2} />
-              <span
-                className={`
-                  text-[10px] leading-none tracking-[0.01em]
-                  ${active ? "font-bold" : "font-medium"}
-                `}
-              >
-                {tab.label}
-              </span>
-            </NavLink>
-          );
-        })}
+      <div className="px-3 pb-3 pt-2 flex justify-center pointer-events-none">
+        <nav
+          ref={containerRef}
+          aria-label="Mobile navigation"
+          className="
+            relative pointer-events-auto
+            bg-white/90 backdrop-blur-xl
+            border border-slate-200/80
+            rounded-full
+            shadow-[0_8px_24px_-6px_rgba(15,23,42,0.18),0_2px_6px_-1px_rgba(15,23,42,0.08)]
+            flex items-stretch
+            max-w-full w-auto
+            min-h-[60px]
+          "
+        >
+          {/* Sliding active-tab indicator */}
+          {indicator.visible && (
+            <div
+              aria-hidden="true"
+              className="absolute top-[6px] bottom-[6px] rounded-full bg-gradient-to-b from-[#0F2D5E] to-[#1a4080] shadow-[0_2px_8px_rgba(15,45,94,0.35)] transition-[left,width] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+              style={{ left: indicator.left, width: indicator.width }}
+            />
+          )}
 
-        {role === "admin" && onMore && (
-          <button
-            type="button"
-            onClick={onMore}
-            className="
-              flex flex-col items-center justify-center gap-1 flex-1 min-w-0 py-1.5 px-1 rounded-lg
-              transition-colors select-none
-              text-slate-400 hover:text-slate-600 active:text-slate-700
-              bg-transparent border-0 cursor-pointer
-            "
-            aria-label="Open full menu"
-          >
-            <MoreHorizontal size={20} strokeWidth={2} />
-            <span className="text-[10px] leading-none font-medium tracking-[0.01em]">
-              More
-            </span>
-          </button>
-        )}
+          {items.map((it, i) => {
+            const Icon = it.icon;
+            const active = it.kind === "tab" && isActive(location.pathname, it.to);
+            const base = `
+              relative z-10 flex flex-col items-center justify-center
+              gap-[2px] px-3 sm:px-4 py-2 min-w-[62px] sm:min-w-[72px] rounded-full
+              transition-colors duration-200 select-none
+              ${active ? "text-[#C8A951]" : "text-slate-500 active:text-slate-700"}
+            `;
+            const handleClick = (e) => {
+              if (it.kind === "more") {
+                e.preventDefault();
+                it.onClick?.();
+              } else {
+                // NavLink handles navigate itself; we just capture the ref.
+              }
+            };
+            if (it.kind === "more") {
+              return (
+                <button
+                  key="__more"
+                  ref={(el) => (itemRefs.current[i] = el)}
+                  type="button"
+                  onClick={handleClick}
+                  className={base + " bg-transparent border-0 cursor-pointer"}
+                  aria-label="Open full menu"
+                >
+                  <Icon size={19} strokeWidth={2} />
+                  <span className="text-[10px] font-semibold leading-none tracking-[0.01em]">
+                    {it.label}
+                  </span>
+                </button>
+              );
+            }
+            return (
+              <NavLink
+                key={it.to}
+                ref={(el) => (itemRefs.current[i] = el)}
+                to={it.to}
+                end={it.end}
+                className={base}
+              >
+                <Icon size={19} strokeWidth={active ? 2.4 : 2} />
+                <span className="text-[10px] font-semibold leading-none tracking-[0.01em]">
+                  {it.label}
+                </span>
+              </NavLink>
+            );
+          })}
+        </nav>
       </div>
-    </nav>
+    </div>
   );
 }
 
-/** Treat partial-path matches as active (e.g. /panels/5/present still lights Panels). */
 function isActive(pathname, to) {
+  if (!to) return false;
   if (pathname === to) return true;
   if (to === "/") return false;
   return pathname.startsWith(to + "/");
