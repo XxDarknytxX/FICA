@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,12 +77,17 @@ import kotlinx.coroutines.launch
  *   - Bottom content padding reserves 100dp for the floating pill tab bar,
  *     matching HomeScreen's trailing spacer convention.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PanelsScreen(onOpenPanel: (Int) -> Unit) {
     var panels by remember { mutableStateOf<List<Panel>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
+    // Tracks when each panel id was most recently flipped to `open` (epoch
+    // millis). Used to float the latest-opened panel to the top — most
+    // recently opened first, earlier-opened after, closed panels last in
+    // their original schedule order.
+    val openedAt = remember { mutableStateMapOf<Int, Long>() }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
@@ -89,6 +95,15 @@ fun PanelsScreen(onOpenPanel: (Int) -> Unit) {
             val resp = ApiClient.service.getPanels(year = CongressYear.Y2026.year)
             val body = resp.body()
             panels = body?.panels ?: emptyList()
+            // Seed openedAt for every currently-open panel so the sort is
+            // stable on first render. All get the same timestamp so the
+            // server's original (scheduled) order acts as the tie-breaker.
+            val now = System.currentTimeMillis()
+            body?.panels?.forEach { p ->
+                if (p.isDiscussionEnabled && !openedAt.containsKey(p.id)) {
+                    openedAt[p.id] = now
+                }
+            }
         } catch (_: Exception) {
             // Leave prior list in place on failure.
         }
@@ -101,14 +116,40 @@ fun PanelsScreen(onOpenPanel: (Int) -> Unit) {
     }
 
     // Live — admin flipping a panel's discussion open/closed is pushed over
-    // the shared WebSocket; patch the matching row in place.
+    // the shared WebSocket; patch the matching row in place and stamp the
+    // open-time so it bubbles to the top.
     DisposableEffect(Unit) {
         val token = ChatWebSocket.addPanelDiscussionHandler { sessionId, enabled ->
             panels = panels.map { p ->
                 if (p.id == sessionId) p.copy(discussion_enabled = enabled) else p
             }
+            if (enabled) {
+                openedAt[sessionId] = System.currentTimeMillis()
+            }
+            // When `enabled == false` we intentionally keep the prior
+            // openedAt value — closed panels don't use it for sorting, and
+            // if the admin flips it back on later we'll overwrite it.
         }
         onDispose { ChatWebSocket.removePanelDiscussionHandler(token) }
+    }
+
+    // Compute the sorted list once per panels/openedAt change.
+    val sortedPanels = remember(panels, openedAt.toMap()) {
+        val originalIndex = panels.withIndex().associate { (i, p) -> p.id to i }
+        panels.sortedWith(Comparator { a, b ->
+            // Open > Closed
+            if (a.isDiscussionEnabled != b.isDiscussionEnabled) {
+                return@Comparator if (a.isDiscussionEnabled) -1 else 1
+            }
+            // Both open — most recent open-time first
+            if (a.isDiscussionEnabled) {
+                val ta = openedAt[a.id] ?: Long.MIN_VALUE
+                val tb = openedAt[b.id] ?: Long.MIN_VALUE
+                if (ta != tb) return@Comparator tb.compareTo(ta)
+            }
+            // Tie or both closed — preserve server order (schedule)
+            (originalIndex[a.id] ?: Int.MAX_VALUE).compareTo(originalIndex[b.id] ?: Int.MAX_VALUE)
+        })
     }
 
     Column(modifier = Modifier.fillMaxSize().background(FICABg)) {
@@ -155,10 +196,25 @@ fun PanelsScreen(onOpenPanel: (Int) -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     item(key = "__summary") {
-                        ListSummary(total = panels.size, open = panels.count { it.isDiscussionEnabled })
+                        ListSummary(
+                            total = sortedPanels.size,
+                            open = sortedPanels.count { it.isDiscussionEnabled },
+                        )
                     }
-                    items(panels, key = { it.id }) { panel ->
-                        PanelCard(panel = panel, onClick = { onOpenPanel(panel.id) })
+                    items(sortedPanels, key = { it.id }) { panel ->
+                        // animateItemPlacement gives a smooth slide when a
+                        // row is re-ordered because a panel just opened —
+                        // no snap-cut.
+                        PanelCard(
+                            panel = panel,
+                            onClick = { onOpenPanel(panel.id) },
+                            modifier = Modifier.animateItemPlacement(
+                                animationSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = 0.82f,
+                                    stiffness = 380f,
+                                ),
+                            ),
+                        )
                     }
                 }
             }
@@ -219,14 +275,18 @@ internal fun panelSessionGroup(panel: Panel): SessionGroup? {
 }
 
 @Composable
-private fun PanelCard(panel: Panel, onClick: () -> Unit) {
+private fun PanelCard(
+    panel: Panel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val group = panelSessionGroup(panel)
     val accent = group?.color ?: FICANavy
     val count = panel.question_count ?: 0
     val enabled = panel.isDiscussionEnabled
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(FICACard)

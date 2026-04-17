@@ -14,6 +14,12 @@ struct PanelsView: View {
     @State private var responseFlag = true   // backend's panel_discussion_enabled (legacy)
     @State private var errorMessage: String?
     @State private var wsHandlerToken: UUID?
+    /// Tracks when each panel was most recently flipped to open. Used to
+    /// bubble the latest-opened panel to the top of the list — most
+    /// recently opened first, then earlier-opened, then everything closed.
+    /// Populated on initial load (all currently-open panels share the same
+    /// load timestamp) and updated on WS toggles.
+    @State private var openedAt: [Int: Date] = [:]
 
     private let year = CongressYear.y2026.rawValue
 
@@ -60,7 +66,8 @@ struct PanelsView: View {
 
     /// Listen for admin toggles broadcast over the shared WebSocket and
     /// patch the matching panel's `discussion_enabled` in-place so the
-    /// list reflects the change without a refresh.
+    /// list reflects the change without a refresh. When a panel opens,
+    /// stamp the current time into `openedAt` so it floats to the top.
     private func subscribeToLiveUpdates() {
         guard wsHandlerToken == nil else { return }
         wsHandlerToken = ChatWebSocket.shared.addPanelDiscussionHandler { sessionId, enabled in
@@ -78,8 +85,19 @@ struct PanelsView: View {
                     question_count: old.question_count, is_panel_member: old.is_panel_member,
                     discussion_enabled: enabled
                 )
-                withAnimation(.easeInOut(duration: 0.2)) {
+                // `.spring` gives the reorder a natural pop — rows slide
+                // smoothly rather than snapping when the list re-orders.
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
                     panels[idx] = updated
+                    if enabled {
+                        // Stamp "now" so this panel jumps to position 0.
+                        openedAt[sessionId] = Date()
+                    }
+                    // When `enabled == false` we intentionally keep the
+                    // prior `openedAt` value around — harmless (closed
+                    // panels are sorted by original order anyway) and
+                    // means if the admin flips it back on within the
+                    // session it retains its previous ordering hint.
                 }
             }
         }
@@ -93,6 +111,32 @@ struct PanelsView: View {
     }
 
     // MARK: - List
+
+    /// Open panels first, most recently opened at the top. Closed panels
+    /// fall through to the bottom, in their original chronological order
+    /// (by position in the server-returned `panels` array).
+    ///
+    /// Tie-breakers:
+    ///   • two open panels with the same `openedAt` (e.g. both flipped
+    ///     open before we started tracking) → original index asc
+    ///   • two closed panels → original index asc (schedule order)
+    private var sortedPanels: [Panel] {
+        let originalIndex = Dictionary(uniqueKeysWithValues: panels.enumerated().map { ($1.id, $0) })
+        return panels.sorted { a, b in
+            if a.isDiscussionEnabled != b.isDiscussionEnabled {
+                // Open panels always beat closed ones.
+                return a.isDiscussionEnabled && !b.isDiscussionEnabled
+            }
+            if a.isDiscussionEnabled && b.isDiscussionEnabled {
+                let ta = openedAt[a.id] ?? .distantPast
+                let tb = openedAt[b.id] ?? .distantPast
+                if ta != tb { return ta > tb }
+            }
+            // Both closed OR both opened at the same moment — preserve
+            // the server's original (schedule) order.
+            return (originalIndex[a.id] ?? .max) < (originalIndex[b.id] ?? .max)
+        }
+    }
 
     private var list: some View {
         ScrollView(showsIndicators: false) {
@@ -115,23 +159,44 @@ struct PanelsView: View {
             .padding(.bottom, 6)
 
             LazyVStack(spacing: 12) {
-                ForEach(panels) { panel in
+                ForEach(sortedPanels) { panel in
                     NavigationLink(value: panel) {
                         PanelCard(panel: panel)
                     }
                     .buttonStyle(.plain)
+                    // Make the reorder visually obvious instead of a
+                    // sudden hop — the row slides into its new slot.
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity
+                    ))
                 }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
+            // An `animation` modifier on the container makes every row
+            // re-animate as the sorted order changes — combined with the
+            // `withAnimation` in the WS handler this gives a clean spring.
+            .animation(.spring(response: 0.45, dampingFraction: 0.82), value: sortedPanels.map { $0.id })
         }
     }
 
     private func load() async {
         do {
             let resp = try await APIService.shared.getPanels(year: year)
-            panels = resp.panels
-            responseFlag = resp.panel_discussion_enabled
+            withAnimation(.easeInOut(duration: 0.2)) {
+                panels = resp.panels
+                responseFlag = resp.panel_discussion_enabled
+                // Seed openedAt for every currently-open panel so the
+                // sort is stable on first render. All get the same
+                // timestamp so the original server order (scheduled time)
+                // acts as the tie-breaker — that's the intuitive default
+                // when multiple panels are already open at launch.
+                let now = Date()
+                for p in resp.panels where p.isDiscussionEnabled {
+                    if openedAt[p.id] == nil { openedAt[p.id] = now }
+                }
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
