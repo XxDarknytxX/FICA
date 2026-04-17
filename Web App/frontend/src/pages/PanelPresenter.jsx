@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, CheckCircle2, Circle, Trash2,
+  ArrowLeft, CheckCircle2, Circle, Trash2, Eye,
   MessageSquare, User as UserIcon, Clock,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import { api } from "../services/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
-import { LiveSwitch, LiveDot, Chip, Spinner, SmoothCount } from "../components/live";
+import { LiveSwitch, LiveDot, Spinner, SmoothCount } from "../components/live";
 
 /**
  * Panel Presenter — the moderator reads questions aloud from this view.
@@ -120,52 +120,58 @@ export default function PanelPresenter() {
 
   return (
     <Layout>
-      <div className="flex flex-col gap-3">
-        {/* Back + breadcrumb */}
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-col gap-2.5">
+        {/* Back — icon-only on mobile to save vertical space. */}
+        <div className="flex items-center gap-2 -mt-1">
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 px-2.5 h-8 text-[12.5px] font-medium text-slate-600 hover:text-slate-900 rounded-md hover:bg-slate-100 transition-colors"
+            aria-label="Back"
+            className="inline-flex items-center justify-center gap-1.5 w-8 h-8 sm:w-auto sm:px-2.5 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-[12.5px] font-medium"
           >
-            <ArrowLeft size={14} /> Back
+            <ArrowLeft size={15} />
+            <span className="hidden sm:inline">Back</span>
           </button>
-          <div className="text-[11.5px] text-slate-400">Panel presenter</div>
         </div>
 
-        {/* Hero */}
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-center justify-between gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-medium text-slate-500 mb-1 inline-flex items-center gap-1.5">
-              <LiveDot connected={connected} />
-              Panel Q&amp;A
-            </div>
-            <h1 className="m-0 text-[17px] font-bold text-slate-900 tracking-[-0.018em] leading-[1.3]">
+        {/* ─── Compact hero — two lines on mobile ────────────────────
+            Row 1: Title + LiveSwitch (right).
+            Row 2: LiveDot · question count · unread count (all chips).
+            The old hero had a full text block on the left + a stacked
+            text+switch column on the right which wrapped awkwardly on
+            narrow widths. This one stays on 2 lines at any viewport. */}
+        <div className="bg-white border border-slate-200 rounded-xl px-3.5 sm:px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="m-0 text-[15px] sm:text-[17px] font-bold text-slate-900 tracking-[-0.018em] leading-[1.3] min-w-0 flex-1">
               {panel?.title || "Panel"}
             </h1>
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              <Chip icon={MessageSquare}>
-                <SmoothCount value={active.length} /> {active.length === 1 ? "question" : "questions"}
-              </Chip>
-              {unreadCount > 0 && (
-                <Chip tone="accent">
-                  <SmoothCount value={unreadCount} /> unread
-                </Chip>
-              )}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="hidden sm:inline text-[11px] font-semibold text-slate-500">
+                {enabled ? "Open" : "Closed"}
+              </span>
+              <LiveSwitch
+                checked={enabled}
+                onChange={toggleDiscussion}
+                disabled={toggling}
+                ariaLabel="Panel discussion"
+              />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className="text-[12px] font-semibold text-slate-900">Discussion</div>
-              <div className="text-[11px] text-slate-500">
-                {enabled ? "Accepting questions" : "Closed to delegates"}
-              </div>
-            </div>
-            <LiveSwitch
-              checked={enabled}
-              onChange={toggleDiscussion}
-              disabled={toggling}
-              ariaLabel="Panel discussion"
-            />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2">
+            <LiveDot connected={connected} />
+            <span className="text-slate-300 text-xs">·</span>
+            <span className="text-[11.5px] font-medium text-slate-500 inline-flex items-center gap-1">
+              <MessageSquare size={11} />
+              <SmoothCount value={active.length} /> {active.length === 1 ? "question" : "questions"}
+            </span>
+            {unreadCount > 0 && (
+              <>
+                <span className="text-slate-300 text-xs">·</span>
+                <span className="text-[11.5px] font-semibold text-[#8a6d1d] inline-flex items-center gap-1">
+                  <Eye size={11} />
+                  <SmoothCount value={unreadCount} /> unread
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -206,53 +212,67 @@ function QuestionCard({ q, onToggleRead, onDismiss }) {
   return (
     <div
       className={`
-        rounded-[10px] border px-4 py-3.5 grid gap-2.5 transition-colors
+        rounded-[10px] border px-3.5 sm:px-4 py-3 transition-colors
         ${read
-          ? "bg-slate-50 border-slate-200 opacity-65"
-          : "bg-white border-[#C8A951]/50"}
+          ? "bg-slate-50/60 border-slate-200 opacity-70"
+          : "bg-white border-[#C8A951]/55"}
       `}
-      style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}
     >
-      <div
+      {/* Meta row — compact attribution + timestamp */}
+      <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-1.5">
+        <UserIcon size={11} className="shrink-0" />
+        <span className="text-slate-900 font-semibold truncate">
+          {q.attendee_name || "Anonymous"}
+        </span>
+        {q.attendee_org && (
+          <span className="text-slate-400 truncate">· {q.attendee_org}</span>
+        )}
+        <span className="ml-auto shrink-0 text-slate-400 inline-flex items-center gap-0.5">
+          <Clock size={10} /> {relTime(q.created_at)}
+        </span>
+      </div>
+
+      {/* The question itself — responsive size so it's comfortable on a
+          phone but big enough to read aloud from a tablet. `break-words`
+          handles long URLs / jargon without blowing up the layout. */}
+      <p
         className={`
-          col-span-2 text-[15.5px] leading-[1.55] text-slate-900 font-medium tracking-[-0.005em]
-          ${read ? "line-through decoration-slate-400" : ""}
+          m-0 text-[14.5px] sm:text-[15.5px] leading-[1.5] font-medium tracking-[-0.005em] break-words
+          ${read ? "text-slate-500 line-through decoration-slate-400 decoration-1" : "text-slate-900"}
         `}
       >
         {q.question}
-      </div>
-      <div className="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-slate-500 leading-[1.4]">
-        <span className="inline-flex items-center gap-1">
-          <UserIcon size={12} />
-          <span className="text-slate-900 font-semibold">{q.attendee_name || "Anonymous"}</span>
-          {q.attendee_org && <span className="text-slate-400">· {q.attendee_org}</span>}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Clock size={11} /> {relTime(q.created_at)}
-        </span>
-        {read && <Chip tone="success">Read</Chip>}
-      </div>
-      <div className="col-span-2 flex gap-1.5 flex-wrap">
+      </p>
+
+      {/* Actions — compact, icon-forward, equal-width on mobile so the
+          two buttons split the row cleanly instead of wrapping. */}
+      <div className="flex gap-2 mt-3">
         <button
           onClick={onToggleRead}
           className={`
-            inline-flex items-center justify-center gap-1.5
-            h-8 px-3 rounded-md text-[12px] font-semibold
+            flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5
+            h-9 px-3 rounded-md text-[12.5px] font-semibold
             transition-colors
             ${read
-              ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              : "bg-[#C8A951] border border-[#a88a38] text-[#091f42] hover:bg-[#a88a38] hover:text-white"}
+              ? "border border-slate-200 bg-white text-slate-700 active:bg-slate-50"
+              : "bg-[#C8A951] border border-[#a88a38] text-[#091f42] active:bg-[#a88a38] active:text-white"}
           `}
         >
-          {read ? <Circle size={13} /> : <CheckCircle2 size={13} />}
-          {read ? "Mark unread" : "Mark read"}
+          {read ? <Circle size={14} /> : <CheckCircle2 size={14} />}
+          {read ? "Unread" : "Mark read"}
         </button>
         <button
           onClick={onDismiss}
-          className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[12px] font-semibold border border-slate-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors"
+          aria-label="Dismiss"
+          className="
+            w-9 h-9 sm:w-auto sm:px-3 inline-flex items-center justify-center gap-1.5
+            rounded-md border border-slate-200 bg-white text-red-600 text-[12.5px] font-semibold
+            active:bg-red-50 active:border-red-200 transition-colors
+          "
+          title="Dismiss"
         >
-          <Trash2 size={13} />
-          Dismiss
+          <Trash2 size={14} />
+          <span className="hidden sm:inline">Dismiss</span>
         </button>
       </div>
     </div>
