@@ -63,16 +63,16 @@ export default function BottomTabBar({ tabs, onMore, role }) {
             border border-slate-200/80
             rounded-full
             shadow-[0_8px_24px_-6px_rgba(15,23,42,0.18),0_2px_6px_-1px_rgba(15,23,42,0.08)]
-            flex items-stretch
-            max-w-full w-auto
-            min-h-[60px]
+            flex items-center
+            p-1.5
           "
         >
-          {/* Sliding active-tab indicator */}
+          {/* Sliding active-tab indicator — inset to match the 6dp nav
+              padding so the pill sits nicely around each circular icon. */}
           {indicator.visible && (
             <div
               aria-hidden="true"
-              className="absolute top-[6px] bottom-[6px] rounded-full bg-gradient-to-b from-[#0F2D5E] to-[#1a4080] shadow-[0_2px_8px_rgba(15,45,94,0.35)] transition-[left,width] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+              className="absolute top-1.5 bottom-1.5 rounded-full bg-gradient-to-b from-[#0F2D5E] to-[#1a4080] shadow-[0_2px_8px_rgba(15,45,94,0.35)] transition-[left,width] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
               style={{ left: indicator.left, width: indicator.width }}
             />
           )}
@@ -80,9 +80,12 @@ export default function BottomTabBar({ tabs, onMore, role }) {
           {items.map((it, i) => {
             const Icon = it.icon;
             const active = it.kind === "tab" && isActive(location.pathname, it.to);
+            // Icons-only bar: each item is a compact square tap target.
+            // Tooltip + aria-label carry the name for accessibility even
+            // though the visible label is gone.
             const base = `
-              relative z-10 flex flex-col items-center justify-center
-              gap-[2px] px-3 sm:px-4 py-2 min-w-[62px] sm:min-w-[72px] rounded-full
+              relative z-10 flex items-center justify-center
+              w-12 h-12 sm:w-[52px] sm:h-[52px] rounded-full
               transition-colors duration-200 select-none
               ${active ? "text-[#C8A951]" : "text-slate-500 active:text-slate-700"}
             `;
@@ -90,8 +93,6 @@ export default function BottomTabBar({ tabs, onMore, role }) {
               if (it.kind === "more") {
                 e.preventDefault();
                 it.onClick?.();
-              } else {
-                // NavLink handles navigate itself; we just capture the ref.
               }
             };
             if (it.kind === "more") {
@@ -103,11 +104,9 @@ export default function BottomTabBar({ tabs, onMore, role }) {
                   onClick={handleClick}
                   className={base + " bg-transparent border-0 cursor-pointer"}
                   aria-label="Open full menu"
+                  title="More"
                 >
-                  <Icon size={19} strokeWidth={2} />
-                  <span className="text-[10px] font-semibold leading-none tracking-[0.01em]">
-                    {it.label}
-                  </span>
+                  <Icon size={21} strokeWidth={2} />
                 </button>
               );
             }
@@ -118,11 +117,10 @@ export default function BottomTabBar({ tabs, onMore, role }) {
                 to={it.to}
                 end={it.end}
                 className={base}
+                aria-label={it.label}
+                title={it.label}
               >
-                <Icon size={19} strokeWidth={active ? 2.4 : 2} />
-                <span className="text-[10px] font-semibold leading-none tracking-[0.01em]">
-                  {it.label}
-                </span>
+                <Icon size={21} strokeWidth={active ? 2.4 : 2} />
               </NavLink>
             );
           })}
