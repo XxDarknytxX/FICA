@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -285,16 +288,31 @@ private fun PanelCard(
     val count = panel.question_count ?: 0
     val enabled = panel.isDiscussionEnabled
 
-    Column(
+    // Row with IntrinsicSize.Min so the accent bar stretches the full
+    // height of the content column — same pattern iOS uses. The bar lives
+    // *inside* the clipped rounded rectangle so the corners cut it cleanly
+    // on both ends.
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(FICACard)
             .clickable { onClick() }
             .alpha(if (enabled) 1f else 0.72f)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .height(IntrinsicSize.Min),
     ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(accent),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
         // Eyebrow: session-group pill (if known) + bullet + time + bullet + room.
         // One compact line instead of three separate stacked rows.
         Row(
@@ -425,7 +443,8 @@ private fun PanelCard(
                 modifier = Modifier.size(14.dp),
             )
         }
-    }
+        }  // end inner Column
+    }  // end outer Row (wrapping accent bar + content)
 }
 
 @Composable
